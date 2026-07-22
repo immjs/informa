@@ -1,0 +1,27 @@
+{
+  "name": "informa",
+  "version": "1.0.0",
+  "description": "Informa's State Management",
+  "keywords": [
+    "state management",
+    "proxy"
+  ],
+  "homepage": "https://github.com/immjs/informa#readme",
+  "bugs": {
+    "url": "https://github.com/immjs/informa/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/immjs/informa.git"
+  },
+  "license": "ISC",
+  "author": "Juliette Wang <immjs>",
+  "type": "module",
+  "main": "dist/high.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
