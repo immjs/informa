@@ -1,9 +1,33 @@
-import { ExitProxySymbol, globalMode } from "./internals";
+import { ExitProxySymbol, globalStateMode, metadata, proxyMemoized, statifySealKey, type Statify } from "./internals.js";
+import { EventEmitter } from "node:events";
 
-function proxify(target: object, expectObject: true): object;
-function proxify(target: any, expectObject: false): any;
-function proxify(target: any, expectObject: boolean) {
-  if (typeof target === "object") {
+export class ProxyMetadata extends EventEmitter<{
+  "changeDeep": [unknown], // fn return value
+  "replaceProp": [string | symbol],
+  "deleteProp": [string | symbol],
+  "setProp": [string | symbol],
+}> {
+  
+}
+
+export interface ExitProxyValue {
+  path: (string | symbol)[],
+  stateRoot: object,
+}
+
+export interface Exitable {
+  [ExitProxySymbol]: ExitProxyValue;
+}
+
+export type StatifiableProp = boolean | string | number | bigint | symbol | null | undefined | Statify<StatifiableObj>;
+export type StatifiableObj = { [k: string | symbol]: StatifiableProp } | {};
+
+export type Statified<T> = T extends object ? Statify<{ [K in keyof T]: Statified<T[K]> }> : T;
+
+export function statifyNoCheck<T extends StatifiableObj>(target: T, expectObject: true): Statified<T> & Exitable;
+export function statifyNoCheck(target: StatifiableProp, expectObject: false): typeof target;
+export function statifyNoCheck(target: StatifiableProp, expectObject: boolean) {
+  if (typeof target !== "object" || target === null) {
     if (expectObject) {
       throw new Error("Expected an object");
     } else {
@@ -11,31 +35,91 @@ function proxify(target: any, expectObject: boolean) {
     }
   }
 
-  return new Proxy(target, {
-    get(target, prop, recv) {
-      if (globalMode === "extract-proxy-path") {} // TODO 13:49 22/07/2026
+  if (proxyMemoized.has(target)) {
+    return proxyMemoized.get(target)
+  } else {
+    const proxyMetadata: ProxyMetadata = new ProxyMetadata();
 
-      return proxify(Reflect.get(target, prop, recv), false);
-    },
-    set(target, prop, newVal, recv) {
-      return Reflect.set(target, prop, newVal, recv);
-    },
-  });
+    const result = new Proxy(target, {
+      get(target, prop, recv) {
+        if (prop === statifySealKey) return true;
+
+        const result = Reflect.get(target, prop, recv);
+
+        if (globalStateMode === "extract-proxy-path") {
+          if (prop === ExitProxySymbol) {
+            return { path: [], stateRoot: target };
+          }
+
+          return extract(result, target, [prop])
+        }
+
+        return statifyNoCheck(result, false);
+      },
+
+      set(target, prop, newVal, recv) {
+        const had = Reflect.has(target, prop);
+
+        const result = Reflect.set(target, prop, newVal, recv);
+
+        if (result) {
+          if (had) {
+            proxyMetadata.emit('changeProp', prop);
+          }
+
+          proxyMetadata.emit('setProp', prop);
+        }
+
+        return result;
+      },
+
+      deleteProperty(target, prop) {
+        proxyMetadata.emit('deleteProp', prop);
+
+        return Reflect.deleteProperty(target, prop);
+      },
+
+      has(target, prop) {
+        if (globalStateMode === "extract-proxy-path") {
+          if (prop === ExitProxySymbol) {
+            return true;
+          }
+        }
+
+        return Reflect.has(target, prop);
+      },
+    }) as Statify<typeof target>;
+
+    metadata.set(result, proxyMetadata);
+    proxyMemoized.set(target, result);
+
+    return result;
+  }
 }
 
-function extract(target: object, stateRoot: object, ) {
+function extract(
+  targetMaybePrimitive: unknown,
+  stateRoot: object,
+  path: (string | symbol)[],
+):
+  Record<string | symbol, unknown> & Exitable
+{
+  const target = Object(targetMaybePrimitive);
+
   return new Proxy(target, {
     get(target, prop, recv) {
       if (prop === ExitProxySymbol) {
-
+        return { path, stateRoot };
       }
 
-      return Reflect.get(target, prop, recv);
+      return extract(Reflect.get(target, prop, recv), stateRoot, [...path, prop]);
     },
-    set(target, prop, newVal, recv) {
-      return Reflect.set(target, prop, newVal, recv);
+    has(target, prop) {
+      if (globalStateMode === "extract-proxy-path") {
+        if (prop === ExitProxySymbol) return true;
+      }
+
+      return Reflect.has(target, prop);
     },
   });
 }
-
-
