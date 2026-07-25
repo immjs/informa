@@ -4,7 +4,7 @@ type EventMap<T> = Record<keyof T, any[]>;
 
 export class EventBroadcaster<T extends EventMap<T>> {
   eventEmitters = new Set<EventEmitter<T>>();
-  constructor(eventEmitters: Iterable<EventEmitter>) {
+  constructor(eventEmitters: Iterable<EventEmitter> = []) {
     this.eventEmitters = new Set(eventEmitters);
   }
   addEventEmitter(eventEmitter: EventEmitter<T>) {

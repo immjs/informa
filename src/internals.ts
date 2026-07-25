@@ -1,4 +1,4 @@
-import type { ProxyMetadata, StatifiableObj } from "./low.js";
+import type { StateMetadata, StatifiableObj } from "./low.js";
 
 export const ExitProxySymbol = Symbol();
 
@@ -9,7 +9,7 @@ export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
   globalStateMode = mode;
 }
 
-export const metadata = new WeakMap<object, ProxyMetadata>();
+export const metadataMap = new WeakMap<Statify<StatifiableObj>, StateMetadata>();
 
 export const proxyMemoized = new WeakMap<object, Statify<StatifiableObj>>();
 

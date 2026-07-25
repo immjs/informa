@@ -1,5 +1,5 @@
-import { ExitProxySymbol, setGlobalStateMode, type Statify } from "./internals.js";
-import { statifyNoCheck, type Exitable, type ExitProxyValue, type StatifiableObj, type Statified } from "./low.js";
+import { ExitProxySymbol, metadataMap, setGlobalStateMode, type Statify } from "./internals.js";
+import { statifyNoCheck, type Exitable, type StatifiableObj, type Statified } from "./low.js";
 
 export function state<T extends StatifiableObj>(original: T): Statified<T> {
   const clone = structuredClone(original);
@@ -7,48 +7,60 @@ export function state<T extends StatifiableObj>(original: T): Statified<T> {
   return statifyNoCheck(clone, true);
 }
 
-interface ListenersBase {
-  change?(): unknown;
-}
-interface ListenersForMultiple extends ListenersBase {
-  ancestors?: {
-    dismount?(): unknown;
-  };
-}
-interface ListenersForSingle extends ListenersBase {
+interface Options {
   dismount?(): unknown;
 }
-type Listeners = ListenersForSingle | ListenersForMultiple;
 
-export function on(
-  ...[selector, action]:
-    [(() => any)[], ListenersForMultiple | (() => void)] |
-    [() => any, ListenersForSingle | (() => void)]
-) {
-  let actuallySelected: ExitProxyValue[];
-
-  {
-    setGlobalStateMode("extract-proxy-path");
-
-    if (Array.isArray(selector)) {
-      actuallySelected = selector.map((v) => (v() as Exitable)[ExitProxySymbol]);
-    } else {
-      const selected = (selector() as Exitable)[ExitProxySymbol];
-      actuallySelected = [selected];
-    }
-
-    setGlobalStateMode("normal");
-  }
-
-  if (actuallySelected.some((v, _, a) => v.stateRoot !== a[0]!.stateRoot)) {
-    throw new Error("State roots are not the same");
-  }
-
-  const normalizedAction: Listeners = typeof action === "function" ? { change: action } : action;
-
-  
+interface Listeners<T> {
+  change?(v: T): void;
 }
 
-const a = state({ hello: {} });
+interface ArrayListeners<T> extends Listeners<T> {
+  push?(v: T, i: number, a: T[]): void;
+  splice?(v: T): void;
+}
 
-a.hello = state({});
+export function on<T, U>(
+  ...[selector, listeners, options]:
+    [() => T, Listeners<T>] |
+    [() => T, Listeners<T>, Options | undefined] |
+    [() => Statify<U[]>, ArrayListeners<U>] |
+    [() => Statify<U[]>, ArrayListeners<U>, Options | undefined]
+): () => void {
+  setGlobalStateMode("extract-proxy-path");
+
+  const { path, stateRoot } = (selector() as Exitable)[ExitProxySymbol];
+
+  setGlobalStateMode("normal");
+
+  const metadata = metadataMap.get(stateRoot);
+
+  if (!metadata) throw new Error("Assertion failed: Metadata should have been created alongside proxy");
+
+  const eventEmitter = metadata.eventEmitterAtPath(path);
+
+  for (const [key, value] of Object.entries(listeners)) {
+    eventEmitter.on(key, value);
+  }
+
+  return () => {
+    for (const [key, value] of Object.entries(listeners)) {
+      eventEmitter.on(key, value);
+    }
+  }
+}
+
+function onChange<T>(s: () => T, l: (v: T) => void, o?: Options) {
+  return on(s, { change: l }, o);
+}
+
+function onPush<T>(s: () => Statify<T[]>, l: (v: T, i: number, a: T[]) => void, o?: Options) {
+  return on(s, { push: l }, o);
+}
+
+export default {
+  on,
+  onChange,
+  onPush,
+  state,
+};

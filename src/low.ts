@@ -1,28 +1,57 @@
-import { ExitProxySymbol, globalStateMode, metadata, proxyMemoized, statifySealKey, type Statify } from "./internals.js";
+import { EventBroadcaster } from "./EventBroadcaster.js";
+import { ExitProxySymbol, globalStateMode, metadataMap, proxyMemoized, statifySealKey, type Statify } from "./internals.js";
 import { EventEmitter } from "node:events";
 
-export class ProxyMetadata extends EventEmitter<{
-  "changeDeep": [unknown], // fn return value
+type ProxyEventEmitterEvents = {
+  "changeDeep": [unknown],
   "replaceProp": [string | symbol],
   "deleteProp": [string | symbol],
   "setProp": [string | symbol],
-}> {
-  listenAtPath(path: (string | symbol)[], callback: () => {}) {
+};
+
+export class ProxyEventEmitter extends EventEmitter<ProxyEventEmitterEvents> {
+
+}
+
+class Tree<T, U> {
+  value: U;
+  children = new Map<T, Tree<T, U>>();
+
+  constructor(value: U) {
+    this.value = value;
+  }
+}
+
+export class StateMetadata extends EventBroadcaster<ProxyEventEmitterEvents> {
+  eventEmitterRoot = new ProxyEventEmitter();
+  eventEmitterTree = new Tree<string | symbol, ProxyEventEmitter>(this.eventEmitterRoot);
+
+  eventEmitterAtPath(path: (string | symbol)[]) {
     if (path.length === 0) throw new Error();
 
-    if (path.length === 1) {
-      return this.on("setProp", (prop) => prop === path[0] && callback());
+    // if (path.length === 1) {
+    //   return this.eventEmitterTree.value.on("setProp", (prop) => prop === path[0] && callback());
+    // }
+
+    let node = this.eventEmitterTree;
+    for (let i = 0; i < path.length; i += 1) {
+      const nextAccess = path[i]!;
+      if (node.children.has(nextAccess)) {
+        node = node.children.get(nextAccess)!;
+      } else {
+        const nextValue = new Tree<string | symbol, ProxyEventEmitter>(new ProxyEventEmitter());
+        node.children.set(nextAccess, nextValue);
+        node = nextValue;
+      }
     }
 
-    // const statifiedNext = this.proxy[path[0]! as keyof typeof this.proxy];
-
-    if (statifiedNext)
+    return node.value;
   }
 }
 
 export interface ExitProxyValue {
   path: (string | symbol)[],
-  stateRoot: object,
+  stateRoot: Statify<StatifiableObj>,
 }
 
 export interface Exitable {
@@ -48,9 +77,9 @@ export function statifyNoCheck(target: StatifiableProp, expectObject: boolean) {
   if (proxyMemoized.has(target)) {
     return proxyMemoized.get(target)
   } else {
-    const proxyMetadata: ProxyMetadata = new ProxyMetadata();
+    const stateMetadata: StateMetadata = new StateMetadata();
 
-    const result = new Proxy(target, {
+    const proxyObj = new Proxy(target, {
       get(target, prop, recv) {
         if (prop === statifySealKey) return true;
 
@@ -58,10 +87,10 @@ export function statifyNoCheck(target: StatifiableProp, expectObject: boolean) {
 
         if (globalStateMode === "extract-proxy-path") {
           if (prop === ExitProxySymbol) {
-            return { path: [], stateRoot: target };
+            return { path: [], stateRoot: proxyObj };
           }
 
-          return extract(result, target, [prop])
+          return extract(result, proxyObj, [prop])
         }
 
         return statifyNoCheck(result, false);
@@ -74,17 +103,17 @@ export function statifyNoCheck(target: StatifiableProp, expectObject: boolean) {
 
         if (result) {
           if (had) {
-            proxyMetadata.emit('changeProp', prop);
+            stateMetadata.emit('changeProp', prop);
           }
 
-          proxyMetadata.emit('setProp', prop);
+          stateMetadata.emit('setProp', prop);
         }
 
         return result;
       },
 
       deleteProperty(target, prop) {
-        proxyMetadata.emit('deleteProp', prop);
+        stateMetadata.emit('deleteProp', prop);
 
         return Reflect.deleteProperty(target, prop);
       },
@@ -100,16 +129,16 @@ export function statifyNoCheck(target: StatifiableProp, expectObject: boolean) {
       },
     }) as Statify<typeof target>;
 
-    metadata.set(result, proxyMetadata);
-    proxyMemoized.set(target, result);
+    metadataMap.set(proxyObj, stateMetadata);
+    proxyMemoized.set(target, proxyObj);
 
-    return result;
+    return proxyObj;
   }
 }
 
 function extract(
   targetMaybePrimitive: unknown,
-  stateRoot: object,
+  stateRoot: Statify<StatifiableObj>,
   path: (string | symbol)[],
 ):
   Record<string | symbol, unknown> & Exitable

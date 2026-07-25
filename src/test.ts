@@ -1,13 +1,9 @@
-import { on, state } from "./high.js";
+import $ from "./high.js";
 
-const stateful = state<{ a: { b: number | { c: number } } }>({ a: { b: 20 } });
+const stateful = $.state<{ a: ({ d: number })[] }>({ a: [] });
 
-on(() => stateful.a.b, () => {
-  console.log("state.a.b changed!");
+$.onPush(() => stateful.a, (v) => {
+  $.onChange(() => v.d, (newValue) => {
+    console.log("New value is", newValue);
+  });
 });
-
-stateful.a.b = state({ c: 20 }); // state.a.b changed!
-
-stateful.a.b.c = 30; // state.a.b changed!
-
-
