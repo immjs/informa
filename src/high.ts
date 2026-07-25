@@ -22,8 +22,8 @@ type Listeners = ListenersForSingle | ListenersForMultiple;
 
 export function on(
   ...[selector, action]:
-    [(() => Exitable)[], ListenersForMultiple] |
-    [() => Exitable, ListenersForSingle]
+    [(() => any)[], ListenersForMultiple | (() => void)] |
+    [() => any, ListenersForSingle | (() => void)]
 ) {
   let actuallySelected: ExitProxyValue[];
 

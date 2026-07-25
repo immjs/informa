@@ -7,7 +7,17 @@ export class ProxyMetadata extends EventEmitter<{
   "deleteProp": [string | symbol],
   "setProp": [string | symbol],
 }> {
-  
+  listenAtPath(path: (string | symbol)[], callback: () => {}) {
+    if (path.length === 0) throw new Error();
+
+    if (path.length === 1) {
+      return this.on("setProp", (prop) => prop === path[0] && callback());
+    }
+
+    // const statifiedNext = this.proxy[path[0]! as keyof typeof this.proxy];
+
+    if (statifiedNext)
+  }
 }
 
 export interface ExitProxyValue {
