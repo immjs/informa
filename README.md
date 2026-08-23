@@ -169,14 +169,43 @@ Available set events include:
 
 - `onAddItem`
 - `onDeleteItem`
+- `onCardChanged` (for cardinality, so as to avoid conflict with Map.size)
+
+### Map events
+
+```ts
+$.onSetEntry(() => model.tags, (key, value) => {
+  console.log("set", tag);
+});
+
+$.onDeleteEntry(() => model.tags, (key, value) => {
+  console.log("deleted", tag);
+});
+```
+
+Available map events include:
+
+- `onSetEntry`
+- `onReplaceEntry`
+- `onDeleteEntry`
 - `onSizeChanged`
 
 ## Classes
 
 Class instances can participate in the same selector model.
 
+### Note before use
+
+Informa uses a prototype blanket layer so selectors like `() => w.state` can still be extracted even when the property lives on a class prototype.
+
+However, the blanket does not intercept any property setters (since it's very possible that the setter does not end up changing the state)
+
+It is up to the superclass to confirm changes using `super.{your property here} = {your value here}`.
+
+### Example
+
 ```ts
-class Wayland extends BaseStatified {
+class Wayland extends $.BaseStatified {
   #state = 0;
 
   get state() { return this.#state; }
@@ -190,7 +219,7 @@ const w = new Wayland();
 $.onSet(() => w.state, (value) => console.log(value));
 ```
 
-Informa uses a prototype blanket layer so selectors like `() => w.state` can still be extracted even when the property lives on a class prototype.
+In case you already wanted to extend antother class, we provide a class factory `$.makeStatified` that allows you to wrap an existing class.
 
 ## Semantics
 
@@ -223,9 +252,18 @@ $.onLengthChanged(...)
 $.onSpliceInElement(...)
 $.onSpliceOutElement(...)
 $.onReplaceElement(...)
-$.onSizeChanged(...)
+$.onCardChanged(...)
 $.onAddItem(...)
 $.onDeleteItem(...)
+$.onSetEntry(...)
+$.onReplaceEntry(...)
+$.onDeleteEntry(...)
+$.onSizeChanged(...)
+
+$.BaseStatified
+$.StatifiedArray
+$.StatifiedSet
+$.StatifiedMap
 ```
 
 ## Goals

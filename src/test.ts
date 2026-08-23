@@ -47,3 +47,11 @@ const w = new Wayland();
 $.onSet(() => w.state, (v) => console.log("asdf awawa!!", v));
 
 w.state = 5;
+
+const map = $.state<Map<number, string>>(new Map());
+$.onSetEntry(() => map, (k, v) => console.log("set", k, v));
+$.onReplaceEntry(() => map, (k, v) => console.log("replace", k, v));
+
+map.set(1, "");
+map.set(1, "asdf");
+map.set(1, "asdf");

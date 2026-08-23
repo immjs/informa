@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { StatifiedSet } from "./quirks/set.js";
 import { isListInGrid } from "./utils.js";
 import { EnumerableWeakMap } from "./EnumerableWeakMap.js";
+import { StatifiedMap } from "./quirks/map.js";
 
 type ProxyEventEmitterEvents = {
   "set": [any],
@@ -18,9 +19,14 @@ type ProxyEventEmitterEvents = {
   "spliceOutElement": [any, number],
   "replaceElement": [any, number],
 
-  "sizeChanged": [],
   "addItem": [any],
   "deleteItem": [any],
+  "cardChanged": [],
+
+  "setEntry": [any, any],
+  "replaceEntry": [any, any],
+  "deleteEntry": [any, any],
+  "sizeChanged": [],
 } & Record<string, never>;
 
 class Tree<T, U> {
@@ -143,8 +149,8 @@ export type StatifiableObj = { [k: string | symbol]: StatifiableProp } | {};
 export type Statified<T extends StatifiableProp> = T extends object
   ? T extends Set<infer U>
     ? StatifiedSet<Statified<U>>
-    : T extends Set<any>
-      ? never
+    : T extends Map<infer K, infer V>
+      ? StatifiedMap<K, Statified<V>>
       : Statify<{ [K in keyof T]: Statified<T[K]> }>
   : T;
 
@@ -182,63 +188,61 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
 
       const result = Reflect.set(target, prop, newVal, recv);
 
-      try {
-        if (result) {
+      if (result) {
+        if (
+          oldVal !== newVal
+          && typeof newVal === "object"
+          && newVal != null
+          && newVal[statifySealKey]
+        ) {
+          const newValMetadata = getMetadataOf(newVal as Statify<StatifiableObj>);
+
+          hook(stateMetadata, prop, newValMetadata);
+        }
+
+        if (had) {
           if (
             oldVal !== newVal
-            && typeof newVal === "object"
-            && newVal != null
-            && newVal[statifySealKey]
+            && typeof oldVal === "object"
+            && oldVal != null
+            && (oldVal as any)[statifySealKey]
           ) {
-            const newValMetadata = getMetadataOf(newVal as Statify<StatifiableObj>);
+            const oldValMetadata = getMetadataOf(oldVal as Statify<StatifiableObj>);
 
-            hook(stateMetadata, prop, newValMetadata);
+            unhook(stateMetadata, prop, oldValMetadata);
           }
 
-          if (had) {
-            if (
-              oldVal !== newVal
-              && typeof oldVal === "object"
-              && oldVal != null
-              && (oldVal as any)[statifySealKey]
-            ) {
-              const oldValMetadata = getMetadataOf(oldVal as Statify<StatifiableObj>);
-
-              unhook(stateMetadata, prop, oldValMetadata);
-            }
-
-            if (
-              typeof prop !== "symbol" &&
-              Number.isInteger(Number(prop)) &&
-              Array.isArray(target)
-            ) {
-              stateMetadata.emit('replaceElement', newVal, Number(prop));
-            }
-
-            stateMetadata.emit('replaceProp', newVal, prop);
+          if (
+            typeof prop !== "symbol" &&
+            Number.isInteger(Number(prop)) &&
+            Array.isArray(target)
+          ) {
+            stateMetadata.emit('replaceElement', newVal, Number(prop));
           }
 
-          stateMetadata.emit('setProp', newVal, prop);
-
-          const maybeEventEmitterAtVal = stateMetadata.eventEmitterAtPathMaybe([prop]);
-          if (maybeEventEmitterAtVal) {
-            if (had) {
-              maybeEventEmitterAtVal.emit('replace', newVal);
-            }
-
-            maybeEventEmitterAtVal.emit('set', newVal);
-
-            emitDescendantPathEvents(
-              stateMetadata,
-              [prop],
-              newVal,
-              had,
-            );
-          }
+          stateMetadata.emit('replaceProp', newVal, prop);
         }
-      } finally {
-        return result;
+
+        stateMetadata.emit('setProp', newVal, prop);
+
+        const maybeEventEmitterAtVal = stateMetadata.eventEmitterAtPathMaybe([prop]);
+        if (maybeEventEmitterAtVal) {
+          if (had) {
+            maybeEventEmitterAtVal.emit('replace', newVal);
+          }
+
+          maybeEventEmitterAtVal.emit('set', newVal);
+
+          emitDescendantPathEvents(
+            stateMetadata,
+            [prop],
+            newVal,
+            had,
+          );
+        }
       }
+
+      return result;
     },
 
     deleteProperty(target, prop) {

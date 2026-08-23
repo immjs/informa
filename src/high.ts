@@ -2,6 +2,7 @@ import { getMetadataOf, isStatified, proxyMemoized, type Statify } from "./inter
 import { hook, selectorToRootAndPath, statifyObject, type StatifiableObj, type StatifiableProp, type Statified } from "./low.js";
 import { StatifiedArray } from "./quirks/array.js";
 import { BaseStatified, makeStatified } from "./quirks/basestatified.js";
+import { StatifiedMap } from "./quirks/map.js";
 import { StatifiedSet } from "./quirks/set.js";
 
 export function stateInner<T extends StatifiableProp>(original: T): Statified<T> {
@@ -17,13 +18,20 @@ export function stateInner<T extends StatifiableProp>(original: T): Statified<T>
         const set = original as unknown as Set<any>;
         return new StatifiedSet(set[Symbol.iterator]().map(stateInner));
 
+      case Map.prototype:
+        const map = original as unknown as Map<any, any>;
+        return new StatifiedMap(map[Symbol.iterator]().map(([k, v]) => [k, stateInner(v)]));
+
       case Array.prototype:
         const array = original as unknown as any[];
         return new StatifiedArray(...array.map(stateInner));
 
       case StatifiedArray.prototype:
       case StatifiedSet.prototype:
-        return original as StatifiedArray<StatifiableProp> | StatifiedSet<StatifiableProp>;
+      case StatifiedMap.prototype:
+        return original as StatifiedArray<StatifiableProp>
+          | StatifiedSet<StatifiableProp>
+          | StatifiedMap<any, StatifiableProp>;
 
       case Object.prototype:
         const newObj = original as unknown as Record<string | symbol, any>;
@@ -61,9 +69,9 @@ interface Listeners<T> {
 }
 
 interface ObjectListeners<K extends string | number | symbol, V> extends Listeners<Record<K, V>> {
-  setProp?(v: V, i: string | symbol): void;
-  replaceProp?(v: V, i: string | symbol): void;
-  deleteProp?(v: V, i: string | symbol): void;
+  setProp?(p: string | symbol, v: V): void;
+  replaceProp?(p: string | symbol, v: V): void;
+  deleteProp?(p: string | symbol, v: V): void;
 }
 
 interface ArrayListeners<T> extends ObjectListeners<number, T> {
@@ -73,13 +81,20 @@ interface ArrayListeners<T> extends ObjectListeners<number, T> {
   lengthChanged?(): void;
 }
 
-interface SetListeners<T> extends ObjectListeners<keyof Set<T>, Set<T>[keyof Set<T>]> {
+interface SetListeners<T> {
   addItem?(v: T): void;
   deleteItem?(v: T): void;
+  cardChanged?(): void;
+}
+
+interface MapListeners<K, V> {
+  setEntry?(k: K, v: V): void;
+  replaceEntry?(k: K, v: V): void;
+  deleteEntry?(k: K, v: V): void;
   sizeChanged?(): void;
 }
 
-export function on<T, K extends string | number | symbol, V, U>(
+export function on<T, K extends string | number | symbol, V, U, K1, V1>(
   ...[selector, listeners, options]:
     [() => T, Listeners<T>]
     | [() => T, Listeners<T>, Options | undefined]
@@ -89,6 +104,8 @@ export function on<T, K extends string | number | symbol, V, U>(
     | [() => Statify<U[]>, ArrayListeners<U>, Options | undefined]
     | [() => Statify<Set<U>>, SetListeners<U>]
     | [() => Statify<Set<U>>, SetListeners<U>, Options | undefined]
+    | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>]
+    | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>, Options | undefined]
 ): () => void {
   const { path, stateRoot } = selectorToRootAndPath(selector as () => Statify<StatifiableObj>);
 
@@ -115,13 +132,13 @@ function onReplace<T>(s: () => T, l: (v: T) => void, o?: Options) {
   return on(s, { replace: l }, o);
 }
 
-function onReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (v: T[keyof T], k: keyof T) => void, o?: Options) {
+function onReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { replaceProp: l }, o);
 }
-function onDeleteProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (v: T[keyof T], k: keyof T) => void, o?: Options) {
+function onDeleteProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { deleteProp: l }, o);
 }
-function onSetProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (v: T[keyof T], k: keyof T) => void, o?: Options) {
+function onSetProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { setProp: l }, o);
 }
 function onLengthChanged(s: () => Statify<StatifiableObj[]>, l: () => void, o?: Options) {
@@ -136,14 +153,26 @@ function onSpliceOutElement<T extends StatifiableObj>(s: () => Statify<T[]>, l: 
 function onReplaceElement<T extends StatifiableObj>(s: () => Statify<T[]>, l: (v: T, k: number) => void, o?: Options) {
   return on(s, { replaceElement: l }, o);
 }
-function onSizeChanged<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: () => void, o?: Options) {
-  return on(s, { sizeChanged: l }, o);
+function onCardChanged(s: () => Statify<Set<StatifiableObj>>, l: () => void, o?: Options) {
+  return on(s, { cardChanged: l }, o);
 }
 function onAddItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v: T) => void, o?: Options) {
   return on(s, { addItem: l }, o);
 }
 function onDeleteItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v: T) => void, o?: Options) {
   return on(s, { deleteItem: l }, o);
+}
+function onSetEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return on(s, { setEntry: l }, o);
+}
+function onReplaceEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return on(s, { replaceEntry: l }, o);
+}
+function onDeleteEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return on(s, { deleteEntry: l }, o);
+}
+function onSizeChanged(s: () => Statify<Map<any, StatifiableObj>>, l: () => void, o?: Options) {
+  return on(s, { sizeChanged: l }, o);
 }
 
 export default {
@@ -157,13 +186,18 @@ export default {
   onSpliceInElement,
   onSpliceOutElement,
   onReplaceElement,
-  onSizeChanged,
+  onCardChanged,
   onAddItem,
   onDeleteItem,
+  onSetEntry,
+  onReplaceEntry,
+  onDeleteEntry,
+  onSizeChanged,
   state,
 
   BaseStatified,
   makeStatified,
   StatifiedArray,
   StatifiedSet,
+  StatifiedMap,
 };

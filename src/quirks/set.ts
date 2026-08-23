@@ -1,9 +1,14 @@
-import { exitProxySymbol, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
-import { StateMetadata, type ExitProxyValue, type StatifiableProp } from "../low.js";
+import { exitProxySymbol, globalStateMode, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { StateMetadata, StatifiableObj, type ExitProxyValue, type StatifiableProp } from "../low.js";
 
 export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements Statify<Set<T>> {
   [statifySealKey]: true = true;
-  declare [exitProxySymbol]: ExitProxyValue;
+  get [exitProxySymbol](): ExitProxyValue {
+    if (globalStateMode === "extract-proxy-path") {
+      return { path: [], stateRoot: this as Statify<StatifiableObj> };
+    }
+    throw new Error("exitProxySymbol is not available in normal mode");
+  }
 
   #metadata: StateMetadata;
 
@@ -17,7 +22,7 @@ export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements S
     if (!super.has(value)) {
       super.add(value);
       this.#metadata.emit("addItem", value);
-      this.#metadata.emit("sizeChanged");
+      this.#metadata.emit("cardChanged");
     }
 
     return this;
@@ -32,14 +37,14 @@ export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements S
       this.#metadata.emit("deleteItem", value);
     }
     if (oldValues.length > 0) {
-      this.#metadata.emit("sizeChanged");
+      this.#metadata.emit("cardChanged");
     }
   }
 
   delete(value: T): boolean {
     if (super.delete(value)) {
       this.#metadata.emit("deleteItem", value);
-      this.#metadata.emit("sizeChanged");
+      this.#metadata.emit("cardChanged");
       return true;
     }
 
