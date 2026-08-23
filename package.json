@@ -1,6 +1,6 @@
 {
   "name": "informa",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Informa's State Management",
   "keywords": [
     "state management",
@@ -22,6 +22,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "typescript": "^7.0.2"
   }
 }
