@@ -1,8 +1,8 @@
 import { exitProxySymbol, getMetadataOf, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
 import { StateMetadata, type ExitProxyValue, type StatifiableProp } from "../low.js";
-import { MakeStatified } from "./basestatified.js";
+import { makeStatified } from "./basestatified.js";
 
-const StatifiableOrgArray = MakeStatified(Array);
+const StatifiableOrgArray = makeStatified(Array);
 
 export class StatifiedArray<T extends StatifiableProp>
   extends StatifiableOrgArray<T> implements Array<T>, Statify<T[]>

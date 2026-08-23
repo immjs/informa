@@ -1,6 +1,7 @@
 import { getMetadataOf, isStatified, proxyMemoized, type Statify } from "./internals.js";
 import { hook, selectorToRootAndPath, statifyObject, type StatifiableObj, type StatifiableProp, type Statified } from "./low.js";
 import { StatifiedArray } from "./quirks/array.js";
+import { BaseStatified, makeStatified } from "./quirks/basestatified.js";
 import { StatifiedSet } from "./quirks/set.js";
 
 export function stateInner<T extends StatifiableProp>(original: T): Statified<T> {
@@ -160,4 +161,9 @@ export default {
   onAddItem,
   onDeleteItem,
   state,
+
+  BaseStatified,
+  makeStatified,
+  StatifiedArray,
+  StatifiedSet,
 };

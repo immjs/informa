@@ -125,7 +125,7 @@ function getBlanketPrototype(actualProto: object) {
 }
 //
 
-export function MakeStatified<
+export function makeStatified<
   V extends ClassType<T, U>,
   T extends any[],
   U extends object,
@@ -191,4 +191,4 @@ export function MakeStatified<
   return Statified as V; // & ClassType<T, Record<string | symbol, any>>;
 }
 
-export const BaseStatified = MakeStatified(Object);
+export const BaseStatified = makeStatified(Object);
