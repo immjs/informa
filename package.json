@@ -1,6 +1,6 @@
 {
   "name": "informa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Informa's State Management",
   "keywords": [
     "state management",
@@ -16,7 +16,6 @@
   },
   "license": "ISC",
   "author": "Juliette Wang <immjs>",
-  "type": "module",
   "main": "dist/high.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
