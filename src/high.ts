@@ -94,18 +94,19 @@ interface MapListeners<K, V> {
   sizeChanged?(): void;
 }
 
+type OnOffParams<T, K extends string | number | symbol, V, U, K1, V1> = [() => T, Listeners<T>]
+  | [() => T, Listeners<T>, Options | undefined]
+  | [() => Statify<Record<K, V>>, ObjectListeners<K, V>]
+  | [() => Statify<Record<K, V>>, ObjectListeners<K, V>, Options | undefined]
+  | [() => Statify<U[]>, ArrayListeners<U>]
+  | [() => Statify<U[]>, ArrayListeners<U>, Options | undefined]
+  | [() => Statify<Set<U>>, SetListeners<U>]
+  | [() => Statify<Set<U>>, SetListeners<U>, Options | undefined]
+  | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>]
+  | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>, Options | undefined];
+
 export function on<T, K extends string | number | symbol, V, U, K1, V1>(
-  ...[selector, listeners, options]:
-    [() => T, Listeners<T>]
-    | [() => T, Listeners<T>, Options | undefined]
-    | [() => Statify<Record<K, V>>, ObjectListeners<K, V>]
-    | [() => Statify<Record<K, V>>, ObjectListeners<K, V>, Options | undefined]
-    | [() => Statify<U[]>, ArrayListeners<U>]
-    | [() => Statify<U[]>, ArrayListeners<U>, Options | undefined]
-    | [() => Statify<Set<U>>, SetListeners<U>]
-    | [() => Statify<Set<U>>, SetListeners<U>, Options | undefined]
-    | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>]
-    | [() => Statify<Map<K1, V1>>, MapListeners<K1, V1>, Options | undefined]
+  ...[selector, listeners, options]: OnOffParams<T, K, V, U, K1, V1>
 ): () => void {
   const { path, stateRoot } = selectorToRootAndPath(selector as () => Statify<StatifiableObj>);
 
@@ -121,6 +122,20 @@ export function on<T, K extends string | number | symbol, V, U, K1, V1>(
     for (const [key, value] of Object.entries(listeners)) {
       eventEmitter.off(key, value);
     }
+  }
+}
+
+export function off<T, K extends string | number | symbol, V, U, K1, V1>(
+  ...[selector, listeners, options]: OnOffParams<T, K, V, U, K1, V1>
+): void {
+  const { path, stateRoot } = selectorToRootAndPath(selector as () => Statify<StatifiableObj>);
+
+  const metadata = getMetadataOf(stateRoot);
+
+  const eventEmitter = metadata.eventEmitterAtPath(path);
+
+  for (const [key, value] of Object.entries(listeners)) {
+    eventEmitter.off(key, value);
   }
 }
 
@@ -177,6 +192,7 @@ function onSizeChanged(s: () => Statify<Map<any, StatifiableObj>>, l: () => void
 
 export default {
   on,
+  off,
   onSet,
   onReplace,
   onReplaceProp,
