@@ -140,13 +140,11 @@ export function off<T, K extends string | number | symbol, V, U, K1, V1>(
 }
 
 function onSet<T>(s: () => T, l: (v: T) => void, o?: Options) {
-  // TODO Handle `once` option
   return on(s, { set: l }, o);
 }
 function onReplace<T>(s: () => T, l: (v: T) => void, o?: Options) {
   return on(s, { replace: l }, o);
 }
-
 function onReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { replaceProp: l }, o);
 }
@@ -190,6 +188,55 @@ function onSizeChanged(s: () => Statify<Map<any, StatifiableObj>>, l: () => void
   return on(s, { sizeChanged: l }, o);
 }
 
+function offSet<T>(s: () => T, l: (v: T) => void, o?: Options) {
+  return off(s, { set: l }, o);
+}
+function offReplace<T>(s: () => T, l: (v: T) => void, o?: Options) {
+  return off(s, { replace: l }, o);
+}
+function offReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
+  return off(s, { replaceProp: l }, o);
+}
+function offDeleteProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
+  return off(s, { deleteProp: l }, o);
+}
+function offSetProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
+  return off(s, { setProp: l }, o);
+}
+function offLengthChanged(s: () => Statify<StatifiableObj[]>, l: () => void, o?: Options) {
+  return off(s, { lengthChanged: l }, o);
+}
+function offSpliceInElement<T extends StatifiableObj>(s: () => Statify<T[]>, l: (v: T, k: number) => void, o?: Options) {
+  return off(s, { spliceInElement: l }, o);
+}
+function offSpliceOutElement<T extends StatifiableObj>(s: () => Statify<T[]>, l: (v: T, k: number) => void, o?: Options) {
+  return off(s, { spliceOutElement: l }, o);
+}
+function offReplaceElement<T extends StatifiableObj>(s: () => Statify<T[]>, l: (v: T, k: number) => void, o?: Options) {
+  return off(s, { replaceElement: l }, o);
+}
+function offCardChanged(s: () => Statify<Set<StatifiableObj>>, l: () => void, o?: Options) {
+  return off(s, { cardChanged: l }, o);
+}
+function offAddItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v: T) => void, o?: Options) {
+  return off(s, { addItem: l }, o);
+}
+function offDeleteItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v: T) => void, o?: Options) {
+  return off(s, { deleteItem: l }, o);
+}
+function offSetEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return off(s, { setEntry: l }, o);
+}
+function offReplaceEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return off(s, { replaceEntry: l }, o);
+}
+function offDeleteEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return off(s, { deleteEntry: l }, o);
+}
+function offSizeChanged(s: () => Statify<Map<any, StatifiableObj>>, l: () => void, o?: Options) {
+  return off(s, { sizeChanged: l }, o);
+}
+
 export default {
   on,
   off,
@@ -209,6 +256,22 @@ export default {
   onReplaceEntry,
   onDeleteEntry,
   onSizeChanged,
+  offSet,
+  offReplace,
+  offReplaceProp,
+  offDeleteProp,
+  offSetProp,
+  offLengthChanged,
+  offSpliceInElement,
+  offSpliceOutElement,
+  offReplaceElement,
+  offCardChanged,
+  offAddItem,
+  offDeleteItem,
+  offSetEntry,
+  offReplaceEntry,
+  offDeleteEntry,
+  offSizeChanged,
   state,
 
   BaseStatified,
