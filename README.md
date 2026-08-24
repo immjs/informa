@@ -124,9 +124,13 @@ The listener above should receive `"Ada"` when `user` is assigned.
 
 Called when a path already existed and is replaced.
 
-### `onSetProp`, `onReplaceProp`, `onDeleteProp`
+### `onAddProp`, `onSetProp`, `onReplaceProp`, `onDeleteProp`
 
 Property-level listeners for objects.
+
+### `offAddProp`, `offSetProp`, `offReplaceProp`, `offDeleteProp`
+
+Property-level listener remover for objects.
 
 ### Array events
 
@@ -146,12 +150,12 @@ $.onSpliceInElement(() => stateful.items, (item, index) => {
 });
 ```
 
-Available array events include:
+Available array event subscribers (resp. unsubscribers) include:
 
-- `onSpliceInElement`
-- `onSpliceOutElement`
-- `onReplaceElement`
-- `onLengthChanged`
+- `onSpliceInElement` (resp `offSpliceInElement`)
+- `onSpliceOutElement` (resp `offSpliceOutElement`)
+- `onReplaceElement` (resp `offReplaceElement`)
+- `onLengthChanged` (resp `offLengthChanged`)
 
 ### Set events
 
@@ -165,11 +169,11 @@ $.onDeleteItem(() => model.tags, (tag) => {
 });
 ```
 
-Available set events include:
+Available set event subscribers (resp. unsubscribers) include:
 
-- `onAddItem`
-- `onDeleteItem`
-- `onCardChanged` (for cardinality, so as to avoid conflict with Map.size)
+- `onAddItem` (resp `offAddItem`)
+- `onDeleteItem` (resp `offDeleteItem`)
+- `onCardChanged` (resp `offCardChanged`) (for cardinality, so as to avoid conflict with Map.size)
 
 ### Map events
 
@@ -183,12 +187,13 @@ $.onDeleteEntry(() => model.tags, (key, value) => {
 });
 ```
 
-Available map events include:
+Available map event subscribers (resp. unsubscribers) include:
 
-- `onSetEntry`
-- `onReplaceEntry`
-- `onDeleteEntry`
-- `onSizeChanged`
+- `onAddEntry` (resp `offAddEntry`)
+- `onSetEntry` (resp `offSetEntry`)
+- `onReplaceEntry` (resp `offReplaceEntry`)
+- `onDeleteEntry` (resp `offDeleteEntry`)
+- `onSizeChanged` (resp `offSizeChanged`)
 
 ## Classes
 
@@ -245,6 +250,7 @@ $.state(...)
 $.on(...)
 $.onSet(...)
 $.onReplace(...)
+$.onAddProp(...)
 $.onReplaceProp(...)
 $.onDeleteProp(...)
 $.onSetProp(...)
@@ -256,9 +262,29 @@ $.onCardChanged(...)
 $.onAddItem(...)
 $.onDeleteItem(...)
 $.onSetEntry(...)
+$.onAddEntry(...)
 $.onReplaceEntry(...)
 $.onDeleteEntry(...)
 $.onSizeChanged(...)
+$.off(...)
+$.offSet(...)
+$.offReplace(...)
+$.offAddProp(...)
+$.offReplaceProp(...)
+$.offDeleteProp(...)
+$.offSetProp(...)
+$.offLengthChanged(...)
+$.offSpliceInElement(...)
+$.offSpliceOutElement(...)
+$.offReplaceElement(...)
+$.offCardChanged(...)
+$.offAddItem(...)
+$.offDeleteItem(...)
+$.offSetEntry(...)
+$.offAddEntry(...)
+$.offReplaceEntry(...)
+$.offDeleteEntry(...)
+$.offSizeChanged(...)
 
 $.BaseStatified
 $.StatifiedArray
