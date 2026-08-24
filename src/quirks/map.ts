@@ -48,6 +48,8 @@ export class StatifiedMap<K, V> extends Map<K, V> implements Statify<Map<K, V>> 
 
     if (had) {
       this.#metadata.emit("replaceEntry", key, value);
+    } else {
+      this.#metadata.emit("addEntry", key, value);
     }
 
     this.#metadata.emit("setEntry", key, value);

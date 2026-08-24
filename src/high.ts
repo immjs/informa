@@ -89,6 +89,7 @@ interface SetListeners<T> {
 
 interface MapListeners<K, V> {
   setEntry?(k: K, v: V): void;
+  addEntry?(k: K, v: V): void;
   replaceEntry?(k: K, v: V): void;
   deleteEntry?(k: K, v: V): void;
   sizeChanged?(): void;
@@ -178,6 +179,9 @@ function onDeleteItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v:
 function onSetEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
   return on(s, { setEntry: l }, o);
 }
+function onAddEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return on(s, { addEntry: l }, o);
+}
 function onReplaceEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
   return on(s, { replaceEntry: l }, o);
 }
@@ -227,6 +231,9 @@ function offDeleteItem<T extends StatifiableObj>(s: () => Statify<Set<T>>, l: (v
 function offSetEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
   return off(s, { setEntry: l }, o);
 }
+function offAddEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
+  return off(s, { addEntry: l }, o);
+}
 function offReplaceEntry<K, V extends StatifiableObj>(s: () => Statify<Map<K, V>>, l: (k: K, v: V) => void, o?: Options) {
   return off(s, { replaceEntry: l }, o);
 }
@@ -253,6 +260,7 @@ export default {
   onAddItem,
   onDeleteItem,
   onSetEntry,
+  onAddEntry,
   onReplaceEntry,
   onDeleteEntry,
   onSizeChanged,
@@ -269,6 +277,7 @@ export default {
   offAddItem,
   offDeleteItem,
   offSetEntry,
+  offAddEntry,
   offReplaceEntry,
   offDeleteEntry,
   offSizeChanged,

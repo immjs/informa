@@ -24,6 +24,7 @@ type ProxyEventEmitterEvents = {
   "cardChanged": [],
 
   "setEntry": [any, any],
+  "addEntry": [any, any],
   "replaceEntry": [any, any],
   "deleteEntry": [any, any],
   "sizeChanged": [],
