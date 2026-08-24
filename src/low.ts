@@ -12,6 +12,7 @@ type ProxyEventEmitterEvents = {
   // "changeDeep": [unknown], // TODO
   "deleteProp": [any, string | symbol],
   "setProp": [any, string | symbol],
+  "addProp": [any, string | symbol],
   "replaceProp": [any, string | symbol],
 
   "lengthChanged": [],
@@ -222,6 +223,16 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
           }
 
           stateMetadata.emit('replaceProp', newVal, prop);
+        } else {
+          if (
+            typeof prop !== "symbol" &&
+            Number.isInteger(Number(prop)) &&
+            Array.isArray(target)
+          ) {
+            stateMetadata.emit('spliceInElement', newVal, Number(prop));
+          }
+
+          stateMetadata.emit('addProp', newVal, prop);
         }
 
         stateMetadata.emit('setProp', newVal, prop);

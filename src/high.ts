@@ -70,6 +70,7 @@ interface Listeners<T> {
 
 interface ObjectListeners<K extends string | number | symbol, V> extends Listeners<Record<K, V>> {
   setProp?(p: string | symbol, v: V): void;
+  addProp?(p: string | symbol, v: V): void;
   replaceProp?(p: string | symbol, v: V): void;
   deleteProp?(p: string | symbol, v: V): void;
 }
@@ -149,6 +150,9 @@ function onReplace<T>(s: () => T, l: (v: T) => void, o?: Options) {
 function onReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { replaceProp: l }, o);
 }
+function onAddProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
+  return on(s, { addProp: l }, o);
+}
 function onDeleteProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return on(s, { deleteProp: l }, o);
 }
@@ -197,6 +201,9 @@ function offSet<T>(s: () => T, l: (v: T) => void, o?: Options) {
 }
 function offReplace<T>(s: () => T, l: (v: T) => void, o?: Options) {
   return off(s, { replace: l }, o);
+}
+function offAddProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
+  return off(s, { addProp: l }, o);
 }
 function offReplaceProp<T extends Record<string | number | symbol, StatifiableProp>>(s: () => Statify<T>, l: (k: keyof T, v: T[keyof T]) => void, o?: Options) {
   return off(s, { replaceProp: l }, o);
@@ -249,6 +256,7 @@ export default {
   off,
   onSet,
   onReplace,
+  onAddProp,
   onReplaceProp,
   onDeleteProp,
   onSetProp,
@@ -266,6 +274,7 @@ export default {
   onSizeChanged,
   offSet,
   offReplace,
+  offAddProp,
   offReplaceProp,
   offDeleteProp,
   offSetProp,
