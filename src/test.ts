@@ -35,7 +35,6 @@ class Wayland extends BaseStatified {
   set state(v: number) {
     console.log("set", v)
     this.#state = v;
-    super.state = v;
   }
 
   constructor() {
@@ -46,7 +45,9 @@ class Wayland extends BaseStatified {
 const w = new Wayland();
 $.onSet(() => w.state, (v) => console.log("asdf awawa!!", v));
 
-w.state = 5;
+// w.state = 5;
+w.state = 6;
+w.state = 7;
 
 const map = $.state<Map<number, string>>(new Map());
 $.onSetEntry(() => map, (k, v) => console.log("set", k, v));

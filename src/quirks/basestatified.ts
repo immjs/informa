@@ -18,7 +18,7 @@ import {
 
 type ClassType<T extends any[] = any[], U = object> = new (...args: T) => U;
 const classMapMemo = new WeakMap<ClassType, ClassType>();
-//
+
 const blanketProtoMemo = new WeakMap<object, object>();
 const blanketProtoSet = new WeakSet<object>();
 
@@ -123,7 +123,6 @@ function getBlanketPrototype(actualProto: object) {
 
   return blanket;
 }
-//
 
 export function makeStatified<
   V extends ClassType<T, U>,
@@ -131,64 +130,34 @@ export function makeStatified<
   U extends object,
 >(
   OriginalClass: V,
-): V & ClassType<T, Record<string | symbol, any>> {
+): V {
   const maybeMemoed = classMapMemo.get(OriginalClass);
   if (maybeMemoed) return maybeMemoed as V;
 
-  const Statified = function (...args: T) {
-    const ctor = new.target ?? Statified;
+  // @ts-ignore - ts-2545 "A mixin class must have a constructor with a single rest parameter of type 'any[]'."
+  class Statified extends OriginalClass {
+    constructor(...args: T) {
+      super(...args);
 
-    const inst = Reflect.construct(OriginalClass, args, ctor) as Statify<U>;
+      const ctor = new.target ?? Statified;
+      const inst = Reflect.construct(OriginalClass, args, ctor) as Statify<U>;
 
-    setMetadataOf(inst, new StateMetadata());
+      setMetadataOf(inst, new StateMetadata());
 
-    const actualProto = ctor.prototype;
-    const finalProto = blanketProtoSet.has(actualProto)
-      ? actualProto
-      : getBlanketPrototype(actualProto);
+      const actualProto = ctor.prototype;
+      const finalProto = blanketProtoSet.has(actualProto)
+        ? actualProto
+        : getBlanketPrototype(actualProto);
 
-    Reflect.setPrototypeOf(inst, finalProto);
+      Reflect.setPrototypeOf(inst, finalProto);
 
-    return inst;
-  } as unknown as (new (...args: T) => Statify<U>); // TODO: solve
-
-  Statified.prototype = new Proxy(
-    {
-      [statifySealKey]: true,
-    } as { [statifySealKey]: true; [exitProxySymbol]: ExitProxyValue; },
-    {
-      get(target, prop, recv) {
-        if (prop === statifySealKey) return true;
-
-        const result = Reflect.get(target, prop, recv);
-
-        if (globalStateMode === "extract-proxy-path") {
-          if (prop === exitProxySymbol) {
-            return { path: [], stateRoot: recv };
-          }
-
-          return extract(result, recv, [prop])
-        }
-
-        return result;
-      },
-
-      has(target, prop) {
-        if (globalStateMode === "extract-proxy-path") {
-          if (prop === exitProxySymbol) {
-            return true;
-          }
-        }
-
-        return Reflect.has(target, prop);
-      },
+      return inst;
     }
-  );
-  Reflect.setPrototypeOf(Statified.prototype, OriginalClass.prototype);
+  };
 
   classMapMemo.set(OriginalClass, Statified);
 
-  return Statified as V; // & ClassType<T, Record<string | symbol, any>>;
+  return Statified;
 }
 
 export const BaseStatified = makeStatified(Object);

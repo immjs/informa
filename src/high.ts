@@ -24,7 +24,7 @@ export function stateInner<T extends StatifiableProp>(original: T): Statified<T>
 
       case Array.prototype:
         const array = original as unknown as any[];
-        return new StatifiedArray(...array.map(stateInner));
+        return StatifiedArray.from(array.map(stateInner));
 
       case StatifiedArray.prototype:
       case StatifiedSet.prototype:
@@ -45,7 +45,7 @@ export function stateInner<T extends StatifiableProp>(original: T): Statified<T>
     }
 
     if (Array.isArray(original)) {
-      return new StatifiedArray(...original.map(stateInner));
+      return new StatifiedArray(original.map(stateInner));
     }
 
     throw new Error(`Cannot clone object with prototype`);

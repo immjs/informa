@@ -203,9 +203,11 @@ Class instances can participate in the same selector model.
 
 Informa uses a prototype blanket layer so selectors like `() => w.state` can still be extracted even when the property lives on a class prototype.
 
-However, the blanket does not intercept any property setters (since it's very possible that the setter does not end up changing the state)
+That same blanket sits as every instance's own `[[Prototype]]`, so it also intercepts every property write - including writes that end up going through a getter/setter pair you define on your own subclass.
 
-It is up to the superclass to confirm changes using `super.{your property here} = {your value here}`.
+Takeaway:
+- The result of `Reflect.getPrototypeOf` will not be the one of your class.
+- You don't need to (and shouldn't) forward anything to `super` (as opposed to what last version might have suggested); just define plain getters/setters as you normally would.
 
 ### Example
 
@@ -216,7 +218,6 @@ class Wayland extends $.BaseStatified {
   get state() { return this.#state; }
   set state(v: number) {
     this.#state = v;
-    super.state = v;
   }
 }
 
