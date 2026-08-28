@@ -331,7 +331,17 @@ export function extract(
   });
 }
 
+const preExtractionHooks = new Set<() => void>();
+export function registerPreExtractionHook(fn: () => void): () => void {
+  preExtractionHooks.add(fn);
+  return () => preExtractionHooks.delete(fn);
+}
+
 export function selectorToRootAndPath(selector: () => Statify<StatifiableObj>) {
+  // Reconcile all pending class instances before entering extract-proxy-path mode.
+  // This ensures field accessors are installed so path extraction resolves correctly.
+  for (const hook of preExtractionHooks) hook();
+
   setGlobalStateMode("extract-proxy-path");
 
   let result;

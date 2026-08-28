@@ -27,7 +27,7 @@ const asdf2 = $.state({ c: asdf });
 // const aassddff = $.state(new Set());
 stateful.b = asdf2;
 
-class Wayland extends BaseStatified {
+class Wayland extends (BaseStatified as unknown as new () => object) {
   displays = new StatifiedSet();
 
   #state = 0;
