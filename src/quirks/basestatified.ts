@@ -15,32 +15,16 @@ import {
   registerPreExtractionHook,
   StateMetadata,
   unhook,
-  type ExitProxyValue,
   type StatifiableObj,
 } from "../low.js";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type ClassType<T extends any[] = any[], U = object> = new (...args: T) => U;
 
-// ---------------------------------------------------------------------------
-// Module-level state
-// ---------------------------------------------------------------------------
-
-/** Classes whose instances have been constructed but not yet field-instrumented. */
+// Classes whose instances have been constructed but not yet field-instrumented.
 const pendingAssemblies = new Set<object>();
 
-/** One shim proxy per outermost constructor (new.target). */
+// One shim proxy per outermost constructor (new.target).
 const shimCache = new WeakMap<Function, object>();
-
-/** Memoization for makeStatified. */
-const classMapMemo = new WeakMap<ClassType, ClassType>();
-
-// ---------------------------------------------------------------------------
-// Utility: walk prototype chain for a descriptor (accessor detection)
-// ---------------------------------------------------------------------------
 
 function getPrototypeChainDescriptor(
   obj: object,
@@ -54,10 +38,6 @@ function getPrototypeChainDescriptor(
   }
   return undefined;
 }
-
-// ---------------------------------------------------------------------------
-// Shim proxy handler (shared across all instances of a given class)
-// ---------------------------------------------------------------------------
 
 const shimHandler: ProxyHandler<object> = {
   get(target, prop, recv) {
@@ -125,10 +105,6 @@ const shimHandler: ProxyHandler<object> = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Shim factory
-// ---------------------------------------------------------------------------
-
 function getOrCreateShim(ctor: Function): object {
   const cached = shimCache.get(ctor);
   if (cached) return cached;
@@ -141,10 +117,6 @@ function getOrCreateShim(ctor: Function): object {
   shimCache.set(ctor, shim);
   return shim;
 }
-
-// ---------------------------------------------------------------------------
-// Post-construction field instrumentation
-// ---------------------------------------------------------------------------
 
 /**
  * Converts all enumerable, configurable own data properties of `instance` into
@@ -255,10 +227,6 @@ function reconcileInstance(instance: object): void {
   // registration API from high.ts to be wired here.
 }
 
-// ---------------------------------------------------------------------------
-// Pre-extraction hook registration (runs once at module load)
-// ---------------------------------------------------------------------------
-//
 // Before selectorToRootAndPath enters extract-proxy-path mode it calls all
 // registered hooks. This hook reconciles every pending instance so that their
 // own data properties are already accessor-backed when the selector runs.
@@ -271,10 +239,6 @@ registerPreExtractionHook(() => {
     reconcileInstance(instance);
   }
 });
-
-// ---------------------------------------------------------------------------
-// statifyClass — primary public API
-// ---------------------------------------------------------------------------
 
 /**
  * Wraps a user-defined class factory in the Informa observable lifecycle.
@@ -351,38 +315,3 @@ export function statifyClass<
   ) as unknown as SubclassType & ClassType<ArgsSub, Statify<OutSub>>;
 }
 
-// ---------------------------------------------------------------------------
-// makeStatified — backward-compatibility wrapper
-// ---------------------------------------------------------------------------
-
-/**
- * Wraps an existing class so its instances participate in the Informa graph.
- * Used internally for StatifiedArray. Memoized per OriginalClass.
- *
- * Prefer `statifyClass` for new class definitions.
- */
-export function makeStatified<
-  V extends ClassType<T, U>,
-  T extends any[],
-  U extends object,
->(OriginalClass: V): V {
-  const maybeMemoed = classMapMemo.get(OriginalClass);
-  if (maybeMemoed) return maybeMemoed as V;
-
-  const result = statifyClass(
-    (Base) => class extends (Base as unknown as typeof Object) {} as unknown as V,
-    OriginalClass,
-  ) as V;
-
-  classMapMemo.set(OriginalClass, result);
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// BaseStatified — base class for user-defined observable classes
-// ---------------------------------------------------------------------------
-
-export const BaseStatified = statifyClass(
-  (Superclass) => class extends (Superclass as unknown as typeof Object) {},
-  Object as unknown as ClassType<[], {}>,
-) as unknown as new (...args: any[]) => object;

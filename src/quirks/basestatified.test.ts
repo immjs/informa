@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import $ from "../high.js";
-import { statifyClass, makeStatified, BaseStatified } from "./basestatified.js";
+import { statifyClass } from "./basestatified.js";
 import { StatifiedSet } from "./set.js";
 import { isStatified, statifySealKey } from "../internals.js";
 
@@ -178,7 +178,7 @@ class WithNonConfig {
 }
 
 const StatifiedNonConfig = statifyClass(
-  (Base) => class extends (Base as unknown as typeof WithNonConfig) {},
+  (Base) => class extends (Base as unknown as typeof WithNonConfig) { },
   WithNonConfig,
 );
 
@@ -214,7 +214,7 @@ class WithAccessor {
 }
 
 const StatifiedAccessor = statifyClass(
-  (Base) => class extends (Base as unknown as typeof WithAccessor) {},
+  (Base) => class extends (Base as unknown as typeof WithAccessor) { },
   WithAccessor,
 );
 
@@ -262,36 +262,35 @@ test("replacing a statified child unhooks the old one", () => {
   assert.ok(true, "no crash on child replacement");
 });
 
-// ---------------------------------------------------------------------------
-// 9. BaseStatified — extend directly
-// ---------------------------------------------------------------------------
+console.log("\n── statifyClass direct extension ──");
 
-console.log("\n── BaseStatified direct extension ──");
+const Wayland = statifyClass(
+  (Base) => class Wayland extends Base {
+    displays: StatifiedSet<string>;
+    #state = 0;
+    get state() { return this.#state; }
+    set state(v: number) { this.#state = v; }
 
-class Wayland extends (BaseStatified as unknown as new () => object) {
-  displays: StatifiedSet<string>;
-  #state = 0;
-  get state() { return this.#state; }
-  set state(v: number) { this.#state = v; }
+    constructor() {
+      super();
+      this.displays = new StatifiedSet<string>();
+    }
+  },
+  Object
+);
 
-  constructor() {
-    super();
-    this.displays = new StatifiedSet<string>();
-  }
-}
-
-test("BaseStatified subclass constructs without error", () => {
+test("statifyClass subclass constructs without error", () => {
   const w = new Wayland();
   assert.ok(w instanceof Wayland);
-  assert.ok(w instanceof (BaseStatified as any));
+  assert.ok(w instanceof Object);
 });
 
-test("isStatified on BaseStatified instance", () => {
+test("isStatified on statifyClass instance", () => {
   const w = new Wayland();
   assert.ok(isStatified(w as any));
 });
 
-test("prototype accessor on BaseStatified subclass fires replacement events", () => {
+test("prototype accessor on statifyClass subclass fires replacement events", () => {
   const w = new Wayland();
   const received: number[] = [];
   $.onReplace(() => (w as any).state, (v: number) => received.push(v));
@@ -300,7 +299,7 @@ test("prototype accessor on BaseStatified subclass fires replacement events", ()
   assert.deepEqual(received, [6, 7]);
 });
 
-test("own field on BaseStatified subclass fires replacement events", () => {
+test("own field on statifyClass subclass fires replacement events", () => {
   const w = new Wayland();
   const received: unknown[] = [];
   $.onReplace(() => (w as any).displays, (v: unknown) => received.push(v));
@@ -309,38 +308,7 @@ test("own field on BaseStatified subclass fires replacement events", () => {
   assert.deepEqual(received, [newSet]);
 });
 
-// ---------------------------------------------------------------------------
-// 10. makeStatified backward compat
-// ---------------------------------------------------------------------------
 
-console.log("\n── makeStatified ──");
-
-class Plain {
-  x = 1;
-}
-const StatifiedPlain = makeStatified(Plain);
-
-test("makeStatified result is statified", () => {
-  const p = new StatifiedPlain();
-  assert.ok(isStatified(p as any));
-});
-
-test("makeStatified instance has correct field value", () => {
-  const p = new StatifiedPlain();
-  assert.equal((p as any).x, 1);
-});
-
-test("makeStatified is memoized (same result for same input)", () => {
-  const A = makeStatified(Plain);
-  const B = makeStatified(Plain);
-  assert.equal(A, B);
-});
-
-// ---------------------------------------------------------------------------
-// 11. Path extraction — on() resolves correctly
-// ---------------------------------------------------------------------------
-
-console.log("\n── Path extraction ──");
 
 test("on() resolves path for own field", () => {
   const w = new WithFields("test");

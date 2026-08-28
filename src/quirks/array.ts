@@ -1,14 +1,16 @@
-import { exitProxySymbol, getMetadataOf, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
-import { StateMetadata, type ExitProxyValue, type StatifiableProp } from "../low.js";
-import { makeStatified } from "./basestatified.js";
-
-const StatifiableOrgArray = makeStatified(Array);
+import { exitProxySymbol, getGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { StateMetadata, type ExitProxyValue, type StatifiableProp, type StatifiableObj } from "../low.js";
 
 export class StatifiedArray<T extends StatifiableProp>
-  extends StatifiableOrgArray<T> implements Array<T>, Statify<T[]>
+  extends Array<T> implements Statify<T[]>
 {
   [statifySealKey]: true = true;
-  declare [exitProxySymbol]: ExitProxyValue;
+  get [exitProxySymbol](): ExitProxyValue {
+    if (getGlobalStateMode() === "extract-proxy-path") {
+      return { path: [], stateRoot: this as Statify<StatifiableObj> };
+    }
+    throw new Error("exitProxySymbol is not available in normal mode");
+  }
 
   #metadata: StateMetadata;
 
@@ -23,7 +25,7 @@ export class StatifiedArray<T extends StatifiableProp>
       super(arrayLengthOrFirstItem, ...rest);
     }
 
-    this.#metadata = getMetadataOf(this);
+    this.#metadata = setMetadataOf(this as Statify<T[]>, new StateMetadata());
   }
 
   push(...items: T[]): number {
