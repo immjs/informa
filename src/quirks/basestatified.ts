@@ -1,3 +1,4 @@
+import { EnumerableWeakSet } from "../EnumerableWeakSet.js";
 import {
   exitProxySymbol,
   getMetadataOf,
@@ -21,7 +22,7 @@ import {
 type ClassType<T extends any[] = any[], U = object> = new (...args: T) => U;
 
 // Classes whose instances have been constructed but not yet field-instrumented.
-const pendingAssemblies = new Set<object>();
+const pendingAssemblies = new EnumerableWeakSet<object>();
 
 // One shim proxy per outermost constructor (new.target).
 const shimCache = new WeakMap<Function, object>();
