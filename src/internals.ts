@@ -5,7 +5,7 @@ export const exitProxySymbol = Symbol.for(`hi-this-is-informa-${version}-s--exit
 
 // The mode is used by the functions exposed by informa,
 // no concurrency issues arise because of the unique call stack.
-const globalStateModeSymbol = Symbol.for("hi-this-is-informa-s--global-state-mode");
+const globalStateModeSymbol = Symbol.for(`hi-this-is-informa-${version}-s--global-state-mode`);
 export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
   if (getGlobalStateMode() === mode) return;
 

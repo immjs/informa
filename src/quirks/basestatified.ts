@@ -21,6 +21,7 @@ const classMapMemo = new WeakMap<ClassType, ClassType>();
 
 const blanketProtoMemo = new WeakMap<object, object>();
 const blanketProtoSet = new WeakSet<object>();
+const blanketDataLayerMemo = new WeakMap<object, object>();
 
 function getBlanketPrototype(actualProto: object) {
   const maybeMemoed = blanketProtoMemo.get(actualProto);
@@ -44,6 +45,10 @@ function getBlanketPrototype(actualProto: object) {
         return extract(undefined, recv as Statify<StatifiableObj>, [prop]);
       }
 
+      if (Reflect.has(blanketDataLayerMemo.get(recv)!, prop)) {
+        return Reflect.get(blanketDataLayerMemo.get(recv)!, prop);
+      }
+
       return Reflect.get(target, prop, recv);
     },
 
@@ -53,7 +58,13 @@ function getBlanketPrototype(actualProto: object) {
       const had = Reflect.has(recv, prop);
       const oldVal = Reflect.get(recv, prop) as unknown;
 
-      const result = Reflect.set(target, prop, newVal, recv);
+      let result;
+      const desc = Reflect.getOwnPropertyDescriptor(target, prop);
+      if (desc === undefined || "value" in desc) {
+        result = Reflect.set(blanketDataLayerMemo.get(recv)!, prop, newVal);
+      } else {
+        result = Reflect.set(target, prop, newVal, recv);
+      }
 
       try {
         if (result) {
@@ -143,6 +154,8 @@ export function makeStatified<
       const inst = Reflect.construct(OriginalClass, args, ctor) as Statify<U>;
 
       setMetadataOf(inst, new StateMetadata());
+
+      blanketDataLayerMemo.set(inst, {});
 
       const actualProto = ctor.prototype;
       const finalProto = blanketProtoSet.has(actualProto)
