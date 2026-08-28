@@ -1,10 +1,10 @@
-import { exitProxySymbol, globalStateMode, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { exitProxySymbol, getGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
 import { StateMetadata, StatifiableObj, type ExitProxyValue, type StatifiableProp } from "../low.js";
 
 export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements Statify<Set<T>> {
   [statifySealKey]: true = true;
   get [exitProxySymbol](): ExitProxyValue {
-    if (globalStateMode === "extract-proxy-path") {
+    if (getGlobalStateMode() === "extract-proxy-path") {
       return { path: [], stateRoot: this as Statify<StatifiableObj> };
     }
     throw new Error("exitProxySymbol is not available in normal mode");

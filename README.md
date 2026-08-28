@@ -9,6 +9,8 @@ It lets you:
 - observe structural collection events like array insertion and set addition
 - keep nested subscriptions working when parents are replaced
 
+As of v3.1.0, it is interoperable with other instances of the same version of itself.
+
 ## Philosophy
 
 Informa is path-based.

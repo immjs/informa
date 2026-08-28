@@ -1,7 +1,7 @@
 import {
   exitProxySymbol,
   getMetadataOf,
-  globalStateMode,
+  getGlobalStateMode,
   setMetadataOf,
   statifySealKey,
   type Statify,
@@ -36,7 +36,7 @@ function getBlanketPrototype(actualProto: object) {
     get(target, prop, recv) {
       if (prop === statifySealKey) return true;
 
-      if (globalStateMode === "extract-proxy-path") {
+      if (getGlobalStateMode() === "extract-proxy-path") {
         if (prop === exitProxySymbol) {
           return { path: [], stateRoot: recv as Statify<StatifiableObj> };
         }
@@ -110,7 +110,7 @@ function getBlanketPrototype(actualProto: object) {
     },
 
     has(target, prop) {
-      if (globalStateMode === "extract-proxy-path" && prop === exitProxySymbol) {
+      if (getGlobalStateMode() === "extract-proxy-path" && prop === exitProxySymbol) {
         return true;
       }
 

@@ -1,4 +1,4 @@
-import { exitProxySymbol, getMetadataOf, globalStateMode, metadataMap, proxyMemoized, setGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "./internals.js";
+import { exitProxySymbol, getGlobalStateMode, getMetadataOf, proxyMemoized, setGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "./internals.js";
 import { EventEmitter } from "node:events";
 import { StatifiedSet } from "./quirks/set.js";
 import { isListInGrid } from "./utils.js";
@@ -173,7 +173,7 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
 
       const result = Reflect.get(target, prop, recv);
 
-      if (globalStateMode === "extract-proxy-path") {
+      if (getGlobalStateMode() === "extract-proxy-path") {
         if (prop === exitProxySymbol) {
           return { path: [], stateRoot: proxyObj };
         }
@@ -282,7 +282,7 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
     },
 
     has(target, prop) {
-      if (globalStateMode === "extract-proxy-path") {
+      if (getGlobalStateMode() === "extract-proxy-path") {
         if (prop === exitProxySymbol) {
           return true;
         }
@@ -322,7 +322,7 @@ export function extract(
       return extract(Reflect.get(target, prop, recv), stateRoot, [...path, prop]);
     },
     has(target, prop) {
-      if (globalStateMode === "extract-proxy-path") {
+      if (getGlobalStateMode() === "extract-proxy-path") {
         if (prop === exitProxySymbol) return true;
       }
 

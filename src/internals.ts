@@ -1,15 +1,29 @@
 import type { StateMetadata, Exitable, StatifiableObj } from "./low.js";
+import { version } from "../package.json";
 
-export const exitProxySymbol = Symbol();
+export const exitProxySymbol = Symbol.for(`hi-this-is-informa-${version}-s--exit-proxy-symbol`);
 
 // The mode is used by the functions exposed by informa,
 // no concurrency issues arise because of the unique call stack.
-export let globalStateMode: "normal" | "extract-proxy-path" = "normal";
+const globalStateModeSymbol = Symbol.for("hi-this-is-informa-s--global-state-mode");
 export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
-  globalStateMode = mode;
+  if (getGlobalStateMode() === mode) return;
+
+  if (mode === "normal") {
+    Reflect.deleteProperty(globalThis, globalStateModeSymbol);
+  } else {
+    Reflect.defineProperty(globalThis, globalStateModeSymbol, { value: mode, configurable: true });
+  }
+}
+export function getGlobalStateMode() {
+  return Reflect.get(globalThis, globalStateModeSymbol) ?? "normal";
 }
 
-export const metadataMap = new WeakMap<Statify<StatifiableObj>, StateMetadata>();
+const metadataMapSymbol = Symbol.for(`hi-this-is-informa-${version}-s--metadata-map`);
+export const metadataMap = Reflect.get(globalThis, metadataMapSymbol) ?? new WeakMap<Statify<StatifiableObj>, StateMetadata>();
+
+Reflect.defineProperty(globalThis, metadataMapSymbol, { value: metadataMap });
+
 export function getMetadataOf(v: Statify<StatifiableObj>) {
   const result = metadataMap.get(v);
 
@@ -23,9 +37,12 @@ export function setMetadataOf(v: Statify<StatifiableObj>, s: StateMetadata) {
   return s;
 }
 
-export const proxyMemoized = new WeakMap<object, Statify<StatifiableObj>>();
+const proxyMemoizedSymbol = Symbol.for(`hi-this-is-informa-${version}-s--proxy-memoized`);
+export const proxyMemoized = Reflect.get(globalThis, proxyMemoizedSymbol) ?? new WeakMap<object, Statify<StatifiableObj>>();
 
-export const statifySealKey = Symbol();
+Reflect.defineProperty(globalThis, proxyMemoizedSymbol, { value: proxyMemoized });
+
+export const statifySealKey = Symbol.for(`hi-this-is-informa-${version}-s--statify-seal-key`);
 export function isStatified<T extends StatifiableObj>(v: T): v is Statify<T> {
   return (v as Statify<T>)[statifySealKey];
 }
