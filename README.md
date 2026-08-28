@@ -8,6 +8,7 @@ It lets you:
 - subscribe to changes at precise property paths
 - observe structural collection events like array insertion and set addition
 - keep nested subscriptions working when parents are replaced
+- correctly diff collections when a field transitions between collection types
 
 ## Philosophy
 
@@ -54,6 +55,7 @@ const model = $.state({
   count: 0,
   items: [] as string[],
   tags: new Set<string>(),
+  meta: new Map<string, number>(),
 });
 ```
 
@@ -78,14 +80,14 @@ const Wayland = $.statifyClass(
 const w = new Wayland();
 $.onReplace(() => w.state, (v) => console.log("state =", v));
 
-w.state = 6; // → logs "state = 6"
+w.state = 6; // -> logs "state = 6"
 ```
 
 The factory pattern (`(Base) => class extends Base { … }`) is intentional: it lets Informa insert its lifecycle layer into the prototype chain without requiring a compiler transform or decorator.
 
-**Own data fields** (e.g. `displays = new StatifiedSet()`) are automatically instrumented after construction - mutations fire `onReplace` and propagate through the graph.
+**Own data fields** (e.g. `displays = new StatifiedSet()`) are automatically instrumented after construction — mutations fire `onReplace` and propagate through the reactive graph.
 
-**Prototype accessor pairs** (`get`/`set`) are called as normal; Informa emits replacement events when their setter is invoked.
+**Private fields with prototype accessor pairs** (`get`/`set`) are called as normal; Informa emits replacement events when their setter is invoked.
 
 #### Extending your own class
 
@@ -106,7 +108,7 @@ const User = $.statifyClass(
 
 const u = new User("u1");
 $.onReplace(() => u.name, (v) => console.log("name =", v));
-u.name = "Ada"; // → logs "name = Ada"
+u.name = "Ada"; // -> logs "name = Ada"
 ```
 
 `instanceof` works for both the generated class and its base:
@@ -157,7 +159,7 @@ $.onSet(() => model.user?.profile?.name, (name) => {
 });
 
 model.user = $.state({ profile: $.state({ name: "Ada" }) });
-// → "name = Ada"
+// -> "name = Ada"
 ```
 
 ### Array events
@@ -171,13 +173,14 @@ $.onSpliceInElement(() => list.items, (item, index) => {
 });
 
 list.items.push($.state({ value: 1 }));
+list.items[0] = $.state({ value: 2 }); // -> fires onReplaceElement
 ```
 
 | Subscriber | Fires when |
 |---|---|
-| `onSpliceInElement` | element inserted |
-| `onSpliceOutElement` | element removed |
-| `onReplaceElement` | element replaced in-place |
+| `onSpliceInElement` | element inserted (push, unshift, splice, `arr[n] = x` on new index) |
+| `onSpliceOutElement` | element removed (pop, shift, splice) |
+| `onReplaceElement` | element replaced in-place (splice, fill, `arr[n] = x` on existing index) |
 | `onLengthChanged` | length changes |
 
 ### Set events
@@ -197,6 +200,32 @@ $.onDeleteEntry(() => model.entries, (k, v) => console.log("deleted", k, v));
 $.onSizeChanged(() => model.entries, () => console.log("size changed"));
 ```
 
+## Collection type transitions
+
+When a statified field changes from one collection type to another, Informa emits the correct structural events on both the old and new collections automatically:
+
+| Old -> New | Events fired |
+|---|---|
+| `Set` -> `Set` | `deleteItem` for removed items, `addItem` for added items, `cardChanged` if anything changed (symmetric diff) |
+| `Set` -> other | `deleteItem` for every item in old set, `cardChanged` |
+| other -> `Set` | `addItem` for every item in new set, `cardChanged` |
+| `Array` -> other | `spliceOutElement` for every element (reverse order), `lengthChanged` |
+| other -> `Array` | `spliceInElement` for every element, `lengthChanged` |
+| `Map` -> `Map` | `deleteEntry` for removed keys, `replaceEntry`+`setEntry` for changed values, `addEntry`+`setEntry` for new keys, `sizeChanged` |
+| `Map` -> other | `deleteEntry` for every entry, `sizeChanged` |
+| other -> `Map` | `addEntry`+`setEntry` for every entry, `sizeChanged` |
+
+```ts
+const s = $.state({ col: $.state(new Set([1, 2, 3])) });
+
+$.onDeleteItem(() => s.col, (v) => console.log("deleted", v));
+$.onAddItem(()  => s.col, (v) => console.log("added",   v));
+
+s.col = $.state(new Set([2, 3, 4]));
+// -> deleted 1
+// -> added 4
+```
+
 ## Semantics
 
 - Selectors are path-based - the extracted path drives all subscriptions.
@@ -204,18 +233,20 @@ $.onSizeChanged(() => model.entries, () => console.log("size changed"));
 - Statified children linked into a parent (via field assignment) propagate events upward through the graph.
 - Aliases are supported: assigning the same statified object to multiple fields creates one graph node with multiple parents, not duplicates.
 - Collection events (splice, add, delete) are structural; property events are path-based.
+- `on*` calls always reconcile any pending class construction before running the selector, so mid-construction subscriptions work correctly.
 
 ## Current limitations
 
 - Selectors should stay close to plain property access.
-- Array element selection is not yet supported.
+- Array index selection in selectors (`() => arr[2]`) is not yet supported.
 - Non-statified foreign objects do not participate in parent-child propagation.
+- Array -> Array transitions do not auto-diff (use explicit splice/replace calls instead).
 
 ## Breaking changes in v4
 
-- `makeStatified` has been removed. Use `$.statifyClass` instead.
-- `$.BaseStatified` remains available but `$.statifyClass` is preferred for all new class definitions.
-- Class field mutations now correctly call prototype setter bodies in addition to emitting Informa events (previous versions bypassed the setter).
+- `makeStatified` and `BaseStatified` have been removed. Use `$.statifyClass` instead.
+- Class field mutations now correctly call prototype setter bodies in addition to emitting Informa events.
+- Direct numeric index assignment on statified arrays now fires `onReplaceElement` / `onSpliceInElement` correctly.
 
 ## API summary
 
@@ -229,12 +260,12 @@ $.on(selector, listeners)
 $.off(selector, listeners)
 
 // Object
-$.onSet(selector, listener)        $.offSet(selector, listener)
-$.onReplace(selector, listener)    $.offReplace(selector, listener)
-$.onSetProp(selector, listener)    $.offSetProp(selector, listener)
-$.onAddProp(selector, listener)    $.offAddProp(selector, listener)
+$.onSet(selector, listener)         $.offSet(selector, listener)
+$.onReplace(selector, listener)     $.offReplace(selector, listener)
+$.onSetProp(selector, listener)     $.offSetProp(selector, listener)
+$.onAddProp(selector, listener)     $.offAddProp(selector, listener)
 $.onReplaceProp(selector, listener) $.offReplaceProp(selector, listener)
-$.onDeleteProp(selector, listener) $.offDeleteProp(selector, listener)
+$.onDeleteProp(selector, listener)  $.offDeleteProp(selector, listener)
 
 // Array
 $.onLengthChanged(selector, listener)    $.offLengthChanged(selector, listener)
@@ -243,19 +274,18 @@ $.onSpliceOutElement(selector, listener) $.offSpliceOutElement(selector, listene
 $.onReplaceElement(selector, listener)   $.offReplaceElement(selector, listener)
 
 // Set
-$.onAddItem(selector, listener)    $.offAddItem(selector, listener)
-$.onDeleteItem(selector, listener) $.offDeleteItem(selector, listener)
+$.onAddItem(selector, listener)     $.offAddItem(selector, listener)
+$.onDeleteItem(selector, listener)  $.offDeleteItem(selector, listener)
 $.onCardChanged(selector, listener) $.offCardChanged(selector, listener)
 
 // Map
-$.onAddEntry(selector, listener)    $.offAddEntry(selector, listener)
-$.onSetEntry(selector, listener)    $.offSetEntry(selector, listener)
+$.onAddEntry(selector, listener)     $.offAddEntry(selector, listener)
+$.onSetEntry(selector, listener)     $.offSetEntry(selector, listener)
 $.onReplaceEntry(selector, listener) $.offReplaceEntry(selector, listener)
-$.onDeleteEntry(selector, listener) $.offDeleteEntry(selector, listener)
-$.onSizeChanged(selector, listener) $.offSizeChanged(selector, listener)
+$.onDeleteEntry(selector, listener)  $.offDeleteEntry(selector, listener)
+$.onSizeChanged(selector, listener)  $.offSizeChanged(selector, listener)
 
-// Classes
-$.BaseStatified
+// Exposed classes
 $.StatifiedArray
 $.StatifiedSet
 $.StatifiedMap

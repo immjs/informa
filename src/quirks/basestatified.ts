@@ -1,3 +1,4 @@
+import { EnumerableWeakMap } from "../EnumerableWeakMap.js";
 import { EnumerableWeakSet } from "../EnumerableWeakSet.js";
 import {
   exitProxySymbol,
@@ -11,6 +12,7 @@ import {
 } from "../internals.js";
 import {
   emitDescendantPathEvents,
+  emitCollectionTransition,
   extract,
   hook,
   registerPreExtractionHook,
@@ -23,6 +25,10 @@ type ClassType<T extends any[] = any[], U = object> = new (...args: T) => U;
 
 // Classes whose instances have been constructed but not yet field-instrumented.
 const pendingAssemblies = new EnumerableWeakSet<object>();
+
+// Map from a still-pending child instance → list of (parentMetadata, prop) pairs
+// that need hook() called once the child is reconciled.
+const deferredHooks = new EnumerableWeakMap<object, { metadata: StateMetadata; prop: string | symbol }[]>();
 
 // One shim proxy per outermost constructor (new.target).
 const shimCache = new WeakMap<Function, object>();
@@ -129,6 +135,16 @@ function reconcileInstance(instance: object): void {
   if (!pendingAssemblies.has(instance)) return;
   pendingAssemblies.delete(instance);
 
+  // Drain any deferred hooks where this instance was the pending child.
+  const deferred = deferredHooks.get(instance);
+  if (deferred) {
+    deferredHooks.delete(instance);
+    const childMetadata = getMetadataOf(instance as Statify<StatifiableObj>);
+    for (const { metadata: parentMetadata, prop } of deferred) {
+      hook(parentMetadata, prop, childMetadata);
+    }
+  }
+
   // Metadata was installed eagerly in ExtractionShimBase's constructor.
   const metadata = getMetadataOf(instance as Statify<StatifiableObj>);
 
@@ -165,13 +181,13 @@ function reconcileInstance(instance: object): void {
       typeof value === "object" &&
       isStatified(value as StatifiableObj)
     ) {
-      try {
-        hook(metadata, prop, getMetadataOf(value as Statify<StatifiableObj>));
-      } catch {
+      if (pendingAssemblies.has(value as object)) {
         // The nested value is itself pending (constructed during this constructor
-        // but not yet reconciled). Skip the initial hook — it will be established
-        // once the nested instance is reconciled and its metadata is known.
-        // TODO: wire the deferred hook once nested pending reconciliation is tracked.
+        // but not yet reconciled — its metadata doesn't exist yet). Defer the
+        // hook: it will be wired once reconcileInstance runs for that child.
+        deferredHooks.getOrInsertComputed(value as object, () => []).push({ metadata, prop });
+      } else {
+        hook(metadata, prop, getMetadataOf(value as Statify<StatifiableObj>));
       }
     }
 
@@ -203,6 +219,8 @@ function reconcileInstance(instance: object): void {
           ) {
             hook(metadata, prop, getMetadataOf(next as Statify<StatifiableObj>));
           }
+
+          emitCollectionTransition(old, next);
         }
 
         // Enter the existing replacement machinery — same path as statifyObject's
@@ -222,10 +240,14 @@ function reconcileInstance(instance: object): void {
     });
   }
 
-  // TODO: Selector/stateRoot reconciliation — re-map any selectors that captured
-  // construction-time paths against a temporary construction root so they resolve
-  // against the final, post-construction stateRoot. Requires the selector
-  // registration API from high.ts to be wired here.
+  // Selector/stateRoot identity: verified correct. Every on*()/off*() call goes
+  // through selectorToRootAndPath(), which fires preExtractionHooks() before
+  // entering extract-proxy-path mode. The preExtractionHook registered below
+  // reconciles all pending instances first — so by the time the selector function
+  // runs, every pending `this.x` field is already an accessor that returns
+  // extract(value, this, ['x']). Path chains like `() => this.a.b.c` are therefore
+  // built up correctly, and stateRoot is the raw instance, which is the same object
+  // keyed in metadataMap. No re-mapping needed.
 }
 
 // Before selectorToRootAndPath enters extract-proxy-path mode it calls all

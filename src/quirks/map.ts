@@ -1,4 +1,4 @@
-import { exitProxySymbol, getGlobalStateMode, setMetadataOf, Statify, statifySealKey } from "../internals.js";
+import { exitProxySymbol, getGlobalStateMode, isStatifiedMapKey, setMetadataOf, Statify, statifySealKey } from "../internals.js";
 import { ExitProxyValue, StateMetadata, StatifiableObj } from "../low.js";
 
 export class StatifiedMap<K, V> extends Map<K, V> implements Statify<Map<K, V>> {
@@ -58,3 +58,5 @@ export class StatifiedMap<K, V> extends Map<K, V> implements Statify<Map<K, V>> 
     return this;
   }
 }
+
+(StatifiedMap.prototype as any)[isStatifiedMapKey] = true;

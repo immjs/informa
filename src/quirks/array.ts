@@ -1,4 +1,4 @@
-import { exitProxySymbol, getGlobalStateMode, getMetadataOf, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { exitProxySymbol, getGlobalStateMode, getMetadataOf, isStatifiedArrayKey, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
 import { StateMetadata, type ExitProxyValue, type StatifiableProp, type StatifiableObj } from "../low.js";
 
 const isMutatingSym = Symbol();
@@ -283,3 +283,5 @@ export class StatifiedArray<T extends StatifiableProp>
     }
   }
 }
+
+(StatifiedArray.prototype as any)[isStatifiedArrayKey] = true;

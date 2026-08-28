@@ -47,3 +47,7 @@ export function isStatified<T extends StatifiableObj>(v: T): v is Statify<T> {
   return (v as Statify<T>)[statifySealKey];
 }
 export type Statify<T extends StatifiableObj> = T & { [statifySealKey]: true } & Exitable;
+
+export const isStatifiedSetKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedSet`);
+export const isStatifiedArrayKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedArray`);
+export const isStatifiedMapKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedMap`);

@@ -1,4 +1,4 @@
-import { exitProxySymbol, getGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { exitProxySymbol, getGlobalStateMode, isStatifiedSetKey, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
 import { StateMetadata, StatifiableObj, type ExitProxyValue, type StatifiableProp } from "../low.js";
 
 export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements Statify<Set<T>> {
@@ -51,3 +51,5 @@ export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements S
     return false;
   }
 }
+
+(StatifiedSet.prototype as any)[isStatifiedSetKey] = true;
