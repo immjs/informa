@@ -1,16 +1,19 @@
-import { exitProxySymbol, getMetadataOf, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
-import { StateMetadata, type ExitProxyValue, type StatifiableProp } from "../low.js";
-import { makeStatified } from "./basestatified.js";
+import { exitProxySymbol, getGlobalStateMode, getMetadataOf, isStatifiedArrayKey, setMetadataOf, statifySealKey, type Statify } from "../internals.js";
+import { StateMetadata, type ExitProxyValue, type StatifiableProp, type StatifiableObj } from "../low.js";
 
-const StatifiableOrgArray = makeStatified(Array);
+const isMutatingSym = Symbol();
 
 export class StatifiedArray<T extends StatifiableProp>
-  extends StatifiableOrgArray<T> implements Array<T>, Statify<T[]>
+  extends Array<T> implements Statify<T[]>
 {
+  [isMutatingSym]?: boolean;
   [statifySealKey]: true = true;
-  declare [exitProxySymbol]: ExitProxyValue;
-
-  #metadata: StateMetadata;
+  get [exitProxySymbol](): ExitProxyValue {
+    if (getGlobalStateMode() === "extract-proxy-path") {
+      return { path: [], stateRoot: this as Statify<StatifiableObj> };
+    }
+    throw new Error("exitProxySymbol is not available in normal mode");
+  }
 
   constructor(arrayLength: number);
   constructor(...items: T[]);
@@ -23,56 +26,97 @@ export class StatifiedArray<T extends StatifiableProp>
       super(arrayLengthOrFirstItem, ...rest);
     }
 
-    this.#metadata = getMetadataOf(this);
+    const proxy = new Proxy(this, {
+      set(target, prop, newVal, recv) {
+        const had = Reflect.has(target, prop);
+        const result = Reflect.set(target, prop, newVal, recv);
+        if (!target[isMutatingSym] && result && typeof prop !== "symbol" && Number.isInteger(Number(prop))) {
+          const metadata = getMetadataOf(recv as Statify<T[]>);
+          if (had) {
+            metadata.emit("replaceElement", newVal, Number(prop));
+          } else {
+            metadata.emit("spliceInElement", newVal, Number(prop));
+            metadata.emit("lengthChanged");
+          }
+        }
+        return result;
+      }
+    });
+
+    setMetadataOf(proxy as Statify<T[]>, new StateMetadata());
+    return proxy;
   }
 
   push(...items: T[]): number {
-    const result = super.push(...items);
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const result = super.push(...items);
 
-    for (let i = result - items.length; i < result; i += 1) {
-      this.#metadata.emit("spliceInElement", this[i]!, i);
+      for (let i = result - items.length; i < result; i += 1) {
+        metadata.emit("spliceInElement", this[i]!, i);
+      }
+
+      if (items.length > 0) {
+        metadata.emit("lengthChanged");
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    if (items.length > 0) {
-      this.#metadata.emit("lengthChanged");
-    }
-
-    return result;
   }
   unshift(...items: T[]): number {
-    const result = super.unshift(...items);
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const result = super.unshift(...items);
 
-    for (let i = 0; i < items.length; i += 1) {
-      this.#metadata.emit("spliceInElement", this[i]!, i);
+      for (let i = 0; i < items.length; i += 1) {
+        metadata.emit("spliceInElement", this[i]!, i);
+      }
+
+      if (items.length > 0) {
+        metadata.emit("lengthChanged");
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    if (items.length > 0) {
-      this.#metadata.emit("lengthChanged");
-    }
-
-    return result;
   }
 
   pop(): T | undefined {
-    if (this.length > 0) {
-      const result = super.pop();
+    this[isMutatingSym] = true;
+    try {
+      if (this.length > 0) {
+        const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+        const result = super.pop();
 
-      this.#metadata.emit("spliceOutElement", result, super.length);
-      this.#metadata.emit("lengthChanged");
-      return result;
+        metadata.emit("spliceOutElement", result, super.length);
+        metadata.emit("lengthChanged");
+        return result;
+      }
+      return undefined;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    return undefined;
   }
   shift(): T | undefined {
-    if (this.length > 0) {
-      const result = super.shift();
+    this[isMutatingSym] = true;
+    try {
+      if (this.length > 0) {
+        const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+        const result = super.shift();
 
-      this.#metadata.emit("spliceOutElement", result, 0);
-      this.#metadata.emit("lengthChanged");
-      return result;
+        metadata.emit("spliceOutElement", result, 0);
+        metadata.emit("lengthChanged");
+        return result;
+      }
+      return undefined;
+    } finally {
+      this[isMutatingSym] = false;
     }
-    return undefined;
   }
 
   #normalizeSplice(start: number, deleteCount?: number, ...items: T[]): [number, number, T[]] {
@@ -99,29 +143,35 @@ export class StatifiedArray<T extends StatifiableProp>
     return [start, deleteCount, items];
   }
   splice(start: number, deleteCount?: number, ...items: T[]): T[] {
-    const [startNormed, deleteCountNormed, itemsNormed] = arguments.length === 1
-      ? this.#normalizeSplice(start)
-      : this.#normalizeSplice(start, deleteCount, ...items);
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const [startNormed, deleteCountNormed, itemsNormed] = arguments.length === 1
+        ? this.#normalizeSplice(start)
+        : this.#normalizeSplice(start, deleteCount, ...items);
 
-    const result = super.splice(startNormed, deleteCountNormed, ...itemsNormed);
+      const result = super.splice(startNormed, deleteCountNormed, ...itemsNormed);
 
-    for (let i = startNormed + deleteCountNormed; i > startNormed + itemsNormed.length; i -= 1) {
-      this.#metadata.emit("spliceOutElement", result[i - startNormed], i);
+      for (let i = startNormed + deleteCountNormed; i > startNormed + itemsNormed.length; i -= 1) {
+        metadata.emit("spliceOutElement", result[i - startNormed], i);
+      }
+
+      for (let i = startNormed; i < startNormed + Math.min(itemsNormed.length, deleteCountNormed); i += 1) {
+        metadata.emit("replaceElement", this[i], i);
+      }
+
+      for (let i = startNormed + deleteCountNormed; i < startNormed + itemsNormed.length; i += 1) {
+        metadata.emit("spliceInElement", this[i], i);
+      }
+
+      if (itemsNormed.length !== deleteCountNormed) {
+        metadata.emit("lengthChanged");
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    for (let i = startNormed; i < startNormed + Math.min(itemsNormed.length, deleteCountNormed); i += 1) {
-      this.#metadata.emit("replaceElement", this[i], i);
-    }
-
-    for (let i = startNormed + deleteCountNormed; i < startNormed + itemsNormed.length; i += 1) {
-      this.#metadata.emit("spliceInElement", this[i], i);
-    }
-
-    if (itemsNormed.length !== deleteCountNormed) {
-      this.#metadata.emit("lengthChanged");
-    }
-
-    return result;
   }
 
   #normalizeStartEnd(start?: number, end?: number): [number, number] {
@@ -156,56 +206,82 @@ export class StatifiedArray<T extends StatifiableProp>
     return [start, end];
   }
   fill(value: T, start?: number, end?: number): this {
-    const [startNormed, endNormed] = arguments.length === 1
-      ? this.#normalizeStartEnd()
-      : arguments.length === 2
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const [startNormed, endNormed] = arguments.length === 1
+        ? this.#normalizeStartEnd()
+        : arguments.length === 2
+          ? this.#normalizeStartEnd(start)
+          : this.#normalizeStartEnd(start, end);
+
+      const result = super.fill(value, startNormed, endNormed);
+
+      for (let i = startNormed; i < endNormed; i += 1) {
+        metadata.emit("replaceElement", this[i], i);
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
+    }
+  }
+  copyWithin(target: number, start: number, end?: number): this {
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const [startNormed, endNormed] = arguments.length === 2
         ? this.#normalizeStartEnd(start)
         : this.#normalizeStartEnd(start, end);
 
-    const result = super.fill(value, startNormed, endNormed);
+      const result = super.copyWithin(target, startNormed, endNormed);
 
-    for (let i = startNormed; i < endNormed; i += 1) {
-      this.#metadata.emit("replaceElement", this[i], i);
+      for (let i = target; i < target + endNormed - startNormed; i += 1) {
+        metadata.emit("replaceElement", this[i], i);
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    return result;
-  }
-  copyWithin(target: number, start: number, end?: number): this {
-    const [startNormed, endNormed] = arguments.length === 2
-      ? this.#normalizeStartEnd(start)
-      : this.#normalizeStartEnd(start, end);
-
-    const result = super.copyWithin(target, startNormed, endNormed);
-
-    for (let i = target; i < target + endNormed - startNormed; i += 1) {
-      this.#metadata.emit("replaceElement", this[i], i);
-    }
-
-    return result;
   }
 
   reverse(): T[] {
-    const result = super.reverse();
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const result = super.reverse();
 
-    const parity = this.length % 2;
-    const half = (this.length / 2) | 0;
-    for (let i = 0; i < this.length - parity; i += 1) {
-      if (i > half) {
-        this.#metadata.emit("replaceElement", this[i], i + parity);
-      } else {
-        this.#metadata.emit("replaceElement", this[i], i);
+      const parity = this.length % 2;
+      const half = (this.length / 2) | 0;
+      for (let i = 0; i < this.length - parity; i += 1) {
+        if (i > half) {
+          metadata.emit("replaceElement", this[i], i + parity);
+        } else {
+          metadata.emit("replaceElement", this[i], i);
+        }
       }
-    }
 
-    return result;
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
+    }
   }
   sort(compareFn?: ((a: T, b: T) => number) | undefined): this {
-    const result = super.sort(compareFn);
+    this[isMutatingSym] = true;
+    try {
+      const metadata = getMetadataOf(this as unknown as Statify<T[]>);
+      const result = super.sort(compareFn);
 
-    for (let i = 0; i < this.length; i += 1) {
-      this.#metadata.emit("replaceElement", this[i], i);
+      for (let i = 0; i < this.length; i += 1) {
+        metadata.emit("replaceElement", this[i], i);
+      }
+
+      return result;
+    } finally {
+      this[isMutatingSym] = false;
     }
-
-    return result;
   }
 }
+
+(StatifiedArray.prototype as any)[isStatifiedArrayKey] = true;

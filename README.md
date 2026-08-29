@@ -4,12 +4,11 @@ Informa is an explicit state management library for JavaScript and TypeScript.
 
 It lets you:
 
-- create statified objects, arrays, sets, and class instances
+- create statified objects, arrays, sets, maps, and class instances
 - subscribe to changes at precise property paths
 - observe structural collection events like array insertion and set addition
 - keep nested subscriptions working when parents are replaced
-
-As of v3.1.0, it is interoperable with other instances of the same version of itself.
+- correctly diff collections when a field transitions between collection types
 
 ## Philosophy
 
@@ -28,23 +27,16 @@ The selector is used to extract a path from a statified root, and listeners are 
 ```ts
 import $ from "informa";
 
-interface Rectangle {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
 const desktop = $.state({
-  monitors: new Set<Rectangle>(),
-  focused: undefined as Rectangle | undefined,
+  monitors: new Set<{ x: number; y: number; w: number; h: number }>(),
+  focused: undefined as { x: number } | undefined,
 });
 
 $.onAddItem(() => desktop.monitors, (monitor) => {
   console.log("monitor added", monitor);
 });
 
-$.onSet(() => desktop.focused?.x, (x) => {
+$.onReplace(() => desktop.focused?.x, (x) => {
   console.log("focused x is now", x);
 });
 
@@ -54,41 +46,90 @@ desktop.focused = $.state({ x: 100, y: 50, w: 800, h: 600 });
 
 ## Creating state
 
-Use `$.state(...)` to create statified values.
+### Plain objects, arrays, sets, maps
 
-Supported shapes include:
-
-- plain objects
-- arrays
-- sets
-- class instances that extend a statified base
+Use `$.state(...)` to create statified values from plain data:
 
 ```ts
 const model = $.state({
   count: 0,
-  items: [],
+  items: [] as string[],
   tags: new Set<string>(),
+  meta: new Map<string, number>(),
 });
 ```
 
 Nested objects are statified recursively.
 
-## Selectors
+### Classes
 
-Selectors should be simple property-path selectors.
-
-Good selectors:
+Use `$.statifyClass` to define observable class instances:
 
 ```ts
+const Wayland = $.statifyClass(
+  (Base) => class Wayland extends Base {
+    displays = new $.StatifiedSet<string>();
+
+    #state = 0;
+    get state() { return this.#state; }
+    set state(v: number) { this.#state = v; }
+  },
+  Object,
+);
+
+const w = new Wayland();
+$.onReplace(() => w.state, (v) => console.log("state =", v));
+
+w.state = 6; // -> logs "state = 6"
+```
+
+The factory pattern (`(Base) => class extends Base { … }`) is intentional: it lets Informa insert its lifecycle layer into the prototype chain without requiring a compiler transform or decorator.
+
+**Own data fields** (e.g. `displays = new StatifiedSet()`) are automatically instrumented after construction — mutations fire `onReplace` and propagate through the reactive graph.
+
+**Private fields with prototype accessor pairs** (`get`/`set`) are called as normal; Informa emits replacement events when their setter is invoked.
+
+#### Extending your own class
+
+Pass any class as the second argument:
+
+```ts
+class Entity {
+  constructor(public id: string) {}
+}
+
+const User = $.statifyClass(
+  (Base) => class User extends Base {
+    name = "anonymous";
+    constructor(id: string) { super(id); }
+  },
+  Entity,
+);
+
+const u = new User("u1");
+$.onReplace(() => u.name, (v) => console.log("name =", v));
+u.name = "Ada"; // -> logs "name = Ada"
+```
+
+`instanceof` works for both the generated class and its base:
+
+```ts
+u instanceof User   // true
+u instanceof Entity // true
+```
+
+## Selectors
+
+Selectors must be simple property-path expressions.
+
+```ts
+// ✓ good
 () => model.count
 () => model.user.name
 () => model.items
 () => model.settings?.theme
-```
 
-Selectors describe a path. These will not work:
-
-```ts
+// ✗ won't work
 () => model.items.map(x => x.id)
 () => fn(model.user)
 () => [model.user, model.id]
@@ -96,210 +137,156 @@ Selectors describe a path. These will not work:
 
 ## Events
 
-### `onSet`
+Every `on*` function returns an unsubscribe callback. Alternatively, the matching `off*` function can be called with the same arguments.
 
-Called when a path receives a value.
-
-```ts
-$.onSet(() => model.count, (value) => {
-  console.log("count =", value);
-});
-
-model.count = 1;
-```
-
-If you subscribe to a deep path and later assign an ancestor, Informa replays the descendant path with the current value.
+### Object events
 
 ```ts
-$.onSet(() => model.user?.profile?.name, (value) => {
-  console.log("name =", value);
-});
-
-model.user = $.state({
-  profile: $.state({ name: "Ada" }),
-});
+$.onReplace(() => model.count, (value) => { … });
+$.onReplaceProp(() => model, (prop, value) => { … });
+$.onAddProp(() => model, (prop, value) => { … });
+$.onDeleteProp(() => model, (prop, value) => { … });
 ```
 
-The listener above should receive `"Ada"` when `user` is assigned.
+`onReplace` fires when a path already had a value and is replaced.  
+`onSet` fires whenever a path receives any value (initial or replacement). Prefer `onReplace` for class field mutations.
 
-### `onReplace`
+If you subscribe to a deep path and an ancestor is assigned later, Informa replays the descendant path with the current value:
 
-Called when a path already existed and is replaced.
+```ts
+$.onSet(() => model.user?.profile?.name, (name) => {
+  console.log("name =", name);
+});
 
-### `onAddProp`, `onSetProp`, `onReplaceProp`, `onDeleteProp`
-
-Property-level listeners for objects.
-
-### `offAddProp`, `offSetProp`, `offReplaceProp`, `offDeleteProp`
-
-Property-level listener remover for objects.
+model.user = $.state({ profile: $.state({ name: "Ada" }) });
+// -> "name = Ada"
+```
 
 ### Array events
 
-Use array-specific listeners for structural changes.
-
 ```ts
-const stateful = $.state({
-  items: [] as { value: number }[],
+const list = $.state({ items: [] as { value: number }[] });
+
+$.onSpliceInElement(() => list.items, (item, index) => {
+  console.log("inserted at", index);
+  $.onReplace(() => item.value, (v) => console.log("value =", v));
 });
 
-$.onSpliceInElement(() => stateful.items, (item, index) => {
-  console.log("inserted", index, item);
-
-  $.onSet(() => item.value, (value) => {
-    console.log("item value =", value);
-  });
-});
+list.items.push($.state({ value: 1 }));
+list.items[0] = $.state({ value: 2 }); // -> fires onReplaceElement
 ```
 
-Available array event subscribers (resp. unsubscribers) include:
-
-- `onSpliceInElement` (resp `offSpliceInElement`)
-- `onSpliceOutElement` (resp `offSpliceOutElement`)
-- `onReplaceElement` (resp `offReplaceElement`)
-- `onLengthChanged` (resp `offLengthChanged`)
+| Subscriber | Fires when |
+|---|---|
+| `onSpliceInElement` | element inserted (push, unshift, splice, `arr[n] = x` on new index) |
+| `onSpliceOutElement` | element removed (pop, shift, splice) |
+| `onReplaceElement` | element replaced in-place (splice, fill, `arr[n] = x` on existing index) |
+| `onLengthChanged` | length changes |
 
 ### Set events
 
 ```ts
-$.onAddItem(() => model.tags, (tag) => {
-  console.log("added", tag);
-});
-
-$.onDeleteItem(() => model.tags, (tag) => {
-  console.log("deleted", tag);
-});
+$.onAddItem(() => model.tags, (tag) => console.log("added", tag));
+$.onDeleteItem(() => model.tags, (tag) => console.log("deleted", tag));
+$.onCardChanged(() => model.tags, () => console.log("size changed"));
 ```
-
-Available set event subscribers (resp. unsubscribers) include:
-
-- `onAddItem` (resp `offAddItem`)
-- `onDeleteItem` (resp `offDeleteItem`)
-- `onCardChanged` (resp `offCardChanged`) (for cardinality, so as to avoid conflict with Map.size)
 
 ### Map events
 
 ```ts
-$.onSetEntry(() => model.tags, (key, value) => {
-  console.log("set", tag);
-});
-
-$.onDeleteEntry(() => model.tags, (key, value) => {
-  console.log("deleted", tag);
-});
+$.onAddEntry(() => model.entries, (k, v) => console.log("added", k, v));
+$.onReplaceEntry(() => model.entries, (k, v) => console.log("replaced", k, v));
+$.onDeleteEntry(() => model.entries, (k, v) => console.log("deleted", k, v));
+$.onSizeChanged(() => model.entries, () => console.log("size changed"));
 ```
 
-Available map event subscribers (resp. unsubscribers) include:
+## Collection type transitions
 
-- `onAddEntry` (resp `offAddEntry`)
-- `onSetEntry` (resp `offSetEntry`)
-- `onReplaceEntry` (resp `offReplaceEntry`)
-- `onDeleteEntry` (resp `offDeleteEntry`)
-- `onSizeChanged` (resp `offSizeChanged`)
+When a statified field changes from one collection type to another, Informa emits the correct structural events on both the old and new collections automatically:
 
-## Classes
-
-Class instances can participate in the same selector model.
-
-### Note before use
-
-Informa uses a prototype blanket layer so selectors like `() => w.state` can still be extracted even when the property lives on a class prototype.
-
-That same blanket sits as every instance's own `[[Prototype]]`, so it also intercepts every property write - including writes that end up going through a getter/setter pair you define on your own subclass.
-
-Takeaway:
-- The result of `Reflect.getPrototypeOf` will not be the one of your class.
-- You don't need to (and shouldn't) forward anything to `super` (as opposed to what last version might have suggested); just define plain getters/setters as you normally would.
-
-### Example
+| Old -> New | Events fired |
+|---|---|
+| `Set` -> `Set` | `deleteItem` for removed items, `addItem` for added items, `cardChanged` if anything changed (symmetric diff) |
+| `Set` -> other | `deleteItem` for every item in old set, `cardChanged` |
+| other -> `Set` | `addItem` for every item in new set, `cardChanged` |
+| `Array` -> other | `spliceOutElement` for every element (reverse order), `lengthChanged` |
+| other -> `Array` | `spliceInElement` for every element, `lengthChanged` |
+| `Map` -> `Map` | `deleteEntry` for removed keys, `replaceEntry`+`setEntry` for changed values, `addEntry`+`setEntry` for new keys, `sizeChanged` |
+| `Map` -> other | `deleteEntry` for every entry, `sizeChanged` |
+| other -> `Map` | `addEntry`+`setEntry` for every entry, `sizeChanged` |
 
 ```ts
-class Wayland extends $.BaseStatified {
-  #state = 0;
+const s = $.state({ col: $.state(new Set([1, 2, 3])) });
 
-  get state() { return this.#state; }
-  set state(v: number) {
-    this.#state = v;
-  }
-}
+$.onDeleteItem(() => s.col, (v) => console.log("deleted", v));
+$.onAddItem(()  => s.col, (v) => console.log("added",   v));
 
-const w = new Wayland();
-$.onSet(() => w.state, (value) => console.log(value));
+s.col = $.state(new Set([2, 3, 4]));
+// -> deleted 1
+// -> added 4
 ```
-
-In case you already wanted to extend antother class, we provide a class factory `$.makeStatified` that allows you to wrap an existing class.
 
 ## Semantics
 
-A few important rules:
-
-- selectors are path-based
-- nested listeners continue to work when statified children are linked into parents
-- assigning an ancestor may trigger listeners on deeper subscribed descendants using the current nested value
-- collection events are structural; property events are path-based
+- Selectors are path-based - the extracted path drives all subscriptions.
+- Assigning an ancestor triggers listeners on subscribed descendants using the current nested value.
+- Statified children linked into a parent (via field assignment) propagate events upward through the graph.
+- Aliases are supported: assigning the same statified object to multiple fields creates one graph node with multiple parents, not duplicates.
+- Collection events (splice, add, delete) are structural; property events are path-based.
+- `on*` calls always reconcile any pending class construction before running the selector, so mid-construction subscriptions work correctly.
 
 ## Current limitations
 
-- selectors should stay close to plain property access
-- arbitrary computed selectors are not guaranteed to work
-- method-call selectors are not part of the core model
-- non-statified foreign objects may not participate in parent-child propagation
-- array elements cannot be selected (yet)
+- Selectors should stay close to plain property access.
+- Array index selection in selectors (`() => arr[2]`) is not yet supported.
+- Non-statified foreign objects do not participate in parent-child propagation.
+- Array -> Array transitions do not auto-diff (use explicit splice/replace calls instead).
+
+## Breaking changes in v4
+
+- `makeStatified` and `BaseStatified` have been removed. Use `$.statifyClass` instead.
+- Class field mutations now correctly call prototype setter bodies in addition to emitting Informa events.
+- Direct numeric index assignment on statified arrays now fires `onReplaceElement` / `onSpliceInElement` correctly.
 
 ## API summary
 
 ```ts
-$.state(...)
-$.on(...)
-$.onSet(...)
-$.onReplace(...)
-$.onAddProp(...)
-$.onReplaceProp(...)
-$.onDeleteProp(...)
-$.onSetProp(...)
-$.onLengthChanged(...)
-$.onSpliceInElement(...)
-$.onSpliceOutElement(...)
-$.onReplaceElement(...)
-$.onCardChanged(...)
-$.onAddItem(...)
-$.onDeleteItem(...)
-$.onSetEntry(...)
-$.onAddEntry(...)
-$.onReplaceEntry(...)
-$.onDeleteEntry(...)
-$.onSizeChanged(...)
-$.off(...)
-$.offSet(...)
-$.offReplace(...)
-$.offAddProp(...)
-$.offReplaceProp(...)
-$.offDeleteProp(...)
-$.offSetProp(...)
-$.offLengthChanged(...)
-$.offSpliceInElement(...)
-$.offSpliceOutElement(...)
-$.offReplaceElement(...)
-$.offCardChanged(...)
-$.offAddItem(...)
-$.offDeleteItem(...)
-$.offSetEntry(...)
-$.offAddEntry(...)
-$.offReplaceEntry(...)
-$.offDeleteEntry(...)
-$.offSizeChanged(...)
+// State creation
+$.state(value)
+$.statifyClass((Base) => class extends Base { … }, SuperClass)
 
-$.BaseStatified
+// General
+$.on(selector, listeners)
+$.off(selector, listeners)
+
+// Object
+$.onSet(selector, listener)         $.offSet(selector, listener)
+$.onReplace(selector, listener)     $.offReplace(selector, listener)
+$.onSetProp(selector, listener)     $.offSetProp(selector, listener)
+$.onAddProp(selector, listener)     $.offAddProp(selector, listener)
+$.onReplaceProp(selector, listener) $.offReplaceProp(selector, listener)
+$.onDeleteProp(selector, listener)  $.offDeleteProp(selector, listener)
+
+// Array
+$.onLengthChanged(selector, listener)    $.offLengthChanged(selector, listener)
+$.onSpliceInElement(selector, listener)  $.offSpliceInElement(selector, listener)
+$.onSpliceOutElement(selector, listener) $.offSpliceOutElement(selector, listener)
+$.onReplaceElement(selector, listener)   $.offReplaceElement(selector, listener)
+
+// Set
+$.onAddItem(selector, listener)     $.offAddItem(selector, listener)
+$.onDeleteItem(selector, listener)  $.offDeleteItem(selector, listener)
+$.onCardChanged(selector, listener) $.offCardChanged(selector, listener)
+
+// Map
+$.onAddEntry(selector, listener)     $.offAddEntry(selector, listener)
+$.onSetEntry(selector, listener)     $.offSetEntry(selector, listener)
+$.onReplaceEntry(selector, listener) $.offReplaceEntry(selector, listener)
+$.onDeleteEntry(selector, listener)  $.offDeleteEntry(selector, listener)
+$.onSizeChanged(selector, listener)  $.offSizeChanged(selector, listener)
+
+// Exposed classes
 $.StatifiedArray
 $.StatifiedSet
 $.StatifiedMap
 ```
-
-## Goals
-
-Informa is built for cases where you want:
-
-- explicit subscriptions
-- precise change notifications
-- propagation through nested state graphs
-- support for objects, arrays, sets, and class instances

@@ -1,5 +1,4 @@
 import $ from "./high.js";
-import { BaseStatified } from "./quirks/basestatified.js";
 import { StatifiedSet } from "./quirks/set.js";
 
 const stateful = $.state<{ a: ({ d: number })[], b?: { c?: { d?: Set<number> } } }>({ a: [] });
@@ -27,20 +26,19 @@ const asdf2 = $.state({ c: asdf });
 // const aassddff = $.state(new Set());
 stateful.b = asdf2;
 
-class Wayland extends BaseStatified {
-  displays = new StatifiedSet();
+const Wayland = $.statifyClass(
+  (Base) => class Wayland extends Base {
+    displays = new StatifiedSet();
 
-  #state = 0;
-  get state() { return this.#state; }
-  set state(v: number) {
-    console.log("set", v)
-    this.#state = v;
-  }
-
-  constructor() {
-    super();
-  }
-}
+    #state = 0;
+    get state() { return this.#state; }
+    set state(v: number) {
+      console.log("set", v);
+      this.#state = v;
+    }
+  },
+  Object,
+);
 
 const w = new Wayland();
 $.onSet(() => w.state, (v) => console.log("asdf awawa!!", v));

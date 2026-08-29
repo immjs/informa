@@ -1,9 +1,10 @@
-import { exitProxySymbol, getGlobalStateMode, getMetadataOf, proxyMemoized, setGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "./internals.js";
+import { exitProxySymbol, getGlobalStateMode, getMetadataOf, isStatifiedArrayKey, isStatifiedMapKey, isStatifiedSetKey, proxyMemoized, setGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "./internals.js";
 import { EventEmitter } from "node:events";
 import { StatifiedSet } from "./quirks/set.js";
 import { isListInGrid } from "./utils.js";
 import { EnumerableWeakMap } from "./EnumerableWeakMap.js";
 import { StatifiedMap } from "./quirks/map.js";
+import { StatifiedArray } from "./quirks/array.js";
 
 type ProxyEventEmitterEvents = {
   "set": [any],
@@ -156,6 +157,112 @@ export type Statified<T extends StatifiableProp> = T extends object
       : Statify<{ [K in keyof T]: Statified<T[K]> }>
   : T;
 
+/**
+ * Emit the appropriate structural events when a field transitions from `old` to
+ * `next`. Called after unhook/hook so the event graph is already up-to-date.
+ *
+ * Rules:
+ *  Set  → Set   : symmetric diff (deleteItem for removed, addItem for added)
+ *  Set  → other : wipe old set (deleteItem every item)
+ *  other→ Set   : introduce new set (addItem every item)
+ *  Array→ other : wipe old array (spliceOutElement every item)
+ *  other→ Array : introduce new array (spliceInElement every item)
+ *  Map  → Map   : diff entries (deleteEntry, replaceEntry, addEntry)
+ *  Map  → other : wipe old map (deleteEntry every entry)
+ *  other→ Map   : introduce new map (addEntry every entry)
+ */
+export function emitCollectionTransition(old: unknown, next: unknown): void {
+  const oldIsSet   = old  != null && typeof old  === "object" && (old  as any)[isStatifiedSetKey];
+  const nextIsSet  = next != null && typeof next === "object" && (next as any)[isStatifiedSetKey];
+  const oldIsArray = old  != null && typeof old  === "object" && (old  as any)[isStatifiedArrayKey];
+  const nextIsArray= next != null && typeof next === "object" && (next as any)[isStatifiedArrayKey];
+  const oldIsMap   = old  != null && typeof old  === "object" && (old  as any)[isStatifiedMapKey];
+  const nextIsMap  = next != null && typeof next === "object" && (next as any)[isStatifiedMapKey];
+
+  // ---- Set transitions ----
+  if (oldIsSet && nextIsSet) {
+    const oldSet  = old  as StatifiedSet<unknown>;
+    const nextSet = next as StatifiedSet<unknown>;
+    const oldMeta = getMetadataOf(oldSet as Statify<{}>);
+    let changed = false;
+    for (const item of oldSet) {
+      if (!nextSet.has(item)) { oldMeta.emit("deleteItem", item); changed = true; }
+    }
+    for (const item of nextSet) {
+      if (!oldSet.has(item))  { oldMeta.emit("addItem",    item); changed = true; }
+    }
+    if (changed) oldMeta.emit("cardChanged");
+    return;
+  }
+  if (oldIsSet) {
+    const oldSet  = old as StatifiedSet<unknown>;
+    const oldMeta = getMetadataOf(oldSet as Statify<{}>);
+    let changed = false;
+    for (const item of oldSet) { oldMeta.emit("deleteItem", item); changed = true; }
+    if (changed) oldMeta.emit("cardChanged");
+  }
+  if (nextIsSet) {
+    const nextSet  = next as StatifiedSet<unknown>;
+    const nextMeta = getMetadataOf(nextSet as Statify<{}>);
+    let changed = false;
+    for (const item of nextSet) { nextMeta.emit("addItem", item); changed = true; }
+    if (changed) nextMeta.emit("cardChanged");
+  }
+
+  // ---- Array transitions ----
+  if (oldIsArray && !nextIsArray) {
+    const oldArr  = old as StatifiedArray<unknown>;
+    const oldMeta = getMetadataOf(oldArr as Statify<{}>);
+    if (oldArr.length > 0) {
+      for (let i = oldArr.length - 1; i >= 0; i--) {
+        oldMeta.emit("spliceOutElement", oldArr[i], i);
+      }
+      oldMeta.emit("lengthChanged");
+    }
+  }
+  if (nextIsArray && !oldIsArray) {
+    const nextArr  = next as StatifiedArray<unknown>;
+    const nextMeta = getMetadataOf(nextArr as Statify<{}>);
+    if (nextArr.length > 0) {
+      for (let i = 0; i < nextArr.length; i++) {
+        nextMeta.emit("spliceInElement", nextArr[i], i);
+      }
+      nextMeta.emit("lengthChanged");
+    }
+  }
+
+  // ---- Map transitions ----
+  if (oldIsMap && nextIsMap) {
+    const oldMap  = old  as StatifiedMap<unknown, unknown>;
+    const nextMap = next as StatifiedMap<unknown, unknown>;
+    const oldMeta = getMetadataOf(oldMap as Statify<{}>);
+    let changed = false;
+    for (const [k, v] of oldMap) {
+      if (!nextMap.has(k)) { oldMeta.emit("deleteEntry", k, v); changed = true; }
+      else if (nextMap.get(k) !== v) { oldMeta.emit("replaceEntry", k, nextMap.get(k)); oldMeta.emit("setEntry", k, nextMap.get(k)); changed = true; }
+    }
+    for (const [k, v] of nextMap) {
+      if (!oldMap.has(k)) { oldMeta.emit("addEntry", k, v); oldMeta.emit("setEntry", k, v); changed = true; }
+    }
+    if (changed) oldMeta.emit("sizeChanged");
+    return;
+  }
+  if (oldIsMap) {
+    const oldMap  = old as StatifiedMap<unknown, unknown>;
+    const oldMeta = getMetadataOf(oldMap as Statify<{}>);
+    let changed = false;
+    for (const [k, v] of oldMap) { oldMeta.emit("deleteEntry", k, v); changed = true; }
+    if (changed) oldMeta.emit("sizeChanged");
+  }
+  if (nextIsMap) {
+    const nextMap  = next as StatifiedMap<unknown, unknown>;
+    const nextMeta = getMetadataOf(nextMap as Statify<{}>);
+    let changed = false;
+    for (const [k, v] of nextMap) { nextMeta.emit("addEntry", k, v); nextMeta.emit("setEntry", k, v); changed = true; }
+    if (changed) nextMeta.emit("sizeChanged");
+  }
+}
+
 export function statifyObject<T extends { [k: string | symbol]: Statified<StatifiableProp> }>(target: T): Statified<T> {
   if ((target as Statified<T>)[statifySealKey]) {
     return target as Statified<T>;
@@ -213,6 +320,8 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
 
             unhook(stateMetadata, prop, oldValMetadata);
           }
+
+          emitCollectionTransition(oldVal, newVal);
 
           if (
             typeof prop !== "symbol" &&
@@ -331,7 +440,17 @@ export function extract(
   });
 }
 
+const preExtractionHooks = new Set<() => void>();
+export function registerPreExtractionHook(fn: () => void): () => void {
+  preExtractionHooks.add(fn);
+  return () => preExtractionHooks.delete(fn);
+}
+
 export function selectorToRootAndPath(selector: () => Statify<StatifiableObj>) {
+  // Reconcile all pending class instances before entering extract-proxy-path mode.
+  // This ensures field accessors are installed so path extraction resolves correctly.
+  for (const hook of preExtractionHooks) hook();
+
   setGlobalStateMode("extract-proxy-path");
 
   let result;
