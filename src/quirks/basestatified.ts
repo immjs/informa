@@ -114,6 +114,8 @@ export function makeStatified<
       dataLayers.set(inst, {});
     }
 
+    setMetadataOf(inst, new StateMetadata());
+
     return inst;
   }
 
