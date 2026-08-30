@@ -1,7 +1,7 @@
 import { getMetadataOf, isStatified, proxyMemoized, type Statify } from "./internals.js";
 import { hook, selectorToRootAndPath, statifyObject, type StatifiableObj, type StatifiableProp, type Statified } from "./low.js";
 import { StatifiedArray } from "./quirks/array.js";
-import { makeStatified } from "./quirks/basestatified.js";
+import { makeBaseStatified, makeStatified } from "./quirks/basestatified.js";
 import { StatifiedMap } from "./quirks/map.js";
 import { StatifiedSet } from "./quirks/set.js";
 
@@ -293,6 +293,7 @@ export default {
   state,
 
   makeStatified,
+  makeBaseStatified,
   StatifiedArray,
   StatifiedSet,
   StatifiedMap,

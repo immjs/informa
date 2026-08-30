@@ -1,6 +1,4 @@
 import $ from "./high.js";
-import { makeStatified } from "./quirks/basestatified.js";
-import { StatifiedSet } from "./quirks/set.js";
 
 const stateful = $.state<{ a: ({ d: number })[], b?: { c?: { d?: Set<number> } } }>({ a: [] });
 
@@ -30,8 +28,8 @@ stateful.b = asdf2;
 interface WaylandState {
   state2: number;
 }
-class Wayland extends makeStatified<WaylandState>(Object) {
-  displays = new StatifiedSet();
+class Wayland extends $.makeBaseStatified<WaylandState>() {
+  displays = new $.StatifiedSet();
 
   state = 10;
 

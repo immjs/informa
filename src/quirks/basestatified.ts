@@ -56,11 +56,14 @@ export function clearPendingAssemblies() {
   }
 }
 
+interface EmptyStateLayer {}
+
 export function makeStatified<
-  StateLayer extends object,
+  SuperclassType extends ClassType<any[], object>,
+  StateLayer extends object = EmptyStateLayer,
 >(
-  Superclass: ClassType<any[], object>,
-): typeof Superclass & ClassType<any[], Statify<StateLayer>> {
+  Superclass: SuperclassType,
+): SuperclassType & ClassType<any[], Statify<StateLayer>> {
 
   if (shimCache.has(Superclass)) {
     return shimCache.get(Superclass) as typeof Superclass & ClassType<any[], Statify<StateLayer>>;
@@ -208,4 +211,4 @@ export function makeStatified<
   return ExtractionShimBase as unknown as typeof Superclass & ClassType<any[], Statify<StateLayer>>;
 }
 
-export const makeBaseStatified = <T extends object>() => makeStatified<T>(Object);
+export const makeBaseStatified = <T extends object>() => makeStatified<typeof Object, T>(Object);

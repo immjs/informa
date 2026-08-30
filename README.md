@@ -69,7 +69,8 @@ Use `$.makeStatified` to define observable class instances:
 interface WaylandState {
   state2: number;
 }
-class Wayland extends $.makeStatified<WaylandState>(Object) {
+class Wayland extends $.makeStatified<typeof Object, WaylandState>(Object) {
+  //                  ^ or $.makeBaseStatified<WaylandState>()
   displays = new $.StatifiedSet();
 
   state = 10;
@@ -229,18 +230,13 @@ s.col = $.state(new Set([2, 3, 4]));
 - Non-statified foreign objects do not participate in parent-child propagation.
 - Array -> Array transitions do not auto-diff (use explicit splice/replace calls instead).
 
-## Breaking changes in v4
-
-- `makeStatified` and `BaseStatified` have been removed. Use `$.statifyClass` instead.
-- Class field mutations now correctly call prototype setter bodies in addition to emitting Informa events.
-- Direct numeric index assignment on statified arrays now fires `onReplaceElement` / `onSpliceInElement` correctly.
-
 ## API summary
 
 ```ts
 // State creation
 $.state(value)
-$.statifyClass((Base) => class extends Base { … }, SuperClass)
+$.makeStatified<typeof Class, DesiredState>(Class)
+$.makeBaseStatified()
 
 // General
 $.on(selector, listeners)
