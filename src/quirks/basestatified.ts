@@ -6,6 +6,7 @@ import {
   setMetadataOf,
   statifySealKey,
   type Statify,
+  metadataMap,
 } from "../internals.js";
 import {
   emitDescendantPathEvents,
@@ -106,15 +107,13 @@ export function makeStatified<
       },
     });
 
-    Reflect.setPrototypeOf(proto, Reflect.getPrototypeOf(inst))
-
-    Reflect.setPrototypeOf(inst, proto);
-
     if (!dataLayers.has(inst)) {
       dataLayers.set(inst, {});
     }
 
-    setMetadataOf(inst, new StateMetadata());
+    Reflect.setPrototypeOf(proto, Reflect.getPrototypeOf(inst))
+
+    Reflect.setPrototypeOf(inst, proto);
 
     return inst;
   }
@@ -128,6 +127,9 @@ export function makeStatified<
     },
 
     set(target, prop, newVal, recv) {
+      if (!metadataMap.has(recv)) {
+        setMetadataOf(recv, new StateMetadata());
+      }
       const stateMetadata = getMetadataOf(recv);
 
       const had = Reflect.has(recv, prop);
