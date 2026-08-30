@@ -56,11 +56,9 @@ export function clearPendingAssemblies() {
   }
 }
 
-interface EmptyStateLayer {}
-
 export function makeStatified<
   SuperclassType extends ClassType<any[], object>,
-  StateLayer extends object = EmptyStateLayer,
+  StateLayer extends object = {},
 >(
   Superclass: SuperclassType,
 ): SuperclassType & ClassType<any[], Statify<StateLayer>> {
