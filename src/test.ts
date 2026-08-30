@@ -1,4 +1,5 @@
 import $ from "./high.js";
+import { makeStatified } from "./quirks/basestatified.js";
 import { StatifiedSet } from "./quirks/set.js";
 
 const stateful = $.state<{ a: ({ d: number })[], b?: { c?: { d?: Set<number> } } }>({ a: [] });
@@ -26,19 +27,21 @@ const asdf2 = $.state({ c: asdf });
 // const aassddff = $.state(new Set());
 stateful.b = asdf2;
 
-const Wayland = $.statifyClass(
-  (Base) => class Wayland extends Base {
-    displays = new StatifiedSet();
+interface WaylandState {
+  state2: number;
+}
+class Wayland extends makeStatified<WaylandState>(Object) {
+  displays = new StatifiedSet();
 
-    #state = 0;
-    get state() { return this.#state; }
-    set state(v: number) {
-      console.log("set", v);
-      this.#state = v;
-    }
-  },
-  Object,
-);
+  state = 10;
+
+  get state2() {
+    return super.state2;
+  }
+  set state2(v) {
+    super.state2 = v;
+  }
+}
 
 const w = new Wayland();
 $.onSet(() => w.state, (v) => console.log("asdf awawa!!", v));
@@ -46,6 +49,12 @@ $.onSet(() => w.state, (v) => console.log("asdf awawa!!", v));
 // w.state = 5;
 w.state = 6;
 w.state = 7;
+
+$.onSet(() => w.state2, (v) => console.log("asdf awawa!!", v));
+
+// w.state2 = 5;
+w.state2 = 1234;
+w.state2 = 12345;
 
 const map = $.state<Map<number, string>>(new Map());
 $.onSetEntry(() => map, (k, v) => console.log("set", k, v));

@@ -63,53 +63,40 @@ Nested objects are statified recursively.
 
 ### Classes
 
-Use `$.statifyClass` to define observable class instances:
+Use `$.makeStatified` to define observable class instances:
 
 ```ts
-const Wayland = $.statifyClass(
-  (Base) => class Wayland extends Base {
-    displays = new $.StatifiedSet<string>();
+interface WaylandState {
+  state2: number;
+}
+class Wayland extends $.makeStatified<WaylandState>(Object) {
+  displays = new $.StatifiedSet();
 
-    #state = 0;
-    get state() { return this.#state; }
-    set state(v: number) { this.#state = v; }
-  },
-  Object,
-);
+  state = 10;
 
-const w = new Wayland();
-$.onReplace(() => w.state, (v) => console.log("state =", v));
-
-w.state = 6; // -> logs "state = 6"
-```
-
-The factory pattern (`(Base) => class extends Base { … }`) is intentional: it lets Informa insert its lifecycle layer into the prototype chain without requiring a compiler transform or decorator.
-
-**Own data fields** (e.g. `displays = new StatifiedSet()`) are automatically instrumented after construction — mutations fire `onReplace` and propagate through the reactive graph.
-
-**Private fields with prototype accessor pairs** (`get`/`set`) are called as normal; Informa emits replacement events when their setter is invoked.
-
-#### Extending your own class
-
-Pass any class as the second argument:
-
-```ts
-class Entity {
-  constructor(public id: string) {}
+  get state2() {
+    return super.state2;
+  }
+  set state2(v) {
+    super.state2 = v;
+  }
 }
 
-const User = $.statifyClass(
-  (Base) => class User extends Base {
-    name = "anonymous";
-    constructor(id: string) { super(id); }
-  },
-  Entity,
-);
+const w = new Wayland();
+$.onSet(() => w.state, (v) => console.log("Changed state", v));
 
-const u = new User("u1");
-$.onReplace(() => u.name, (v) => console.log("name =", v));
-u.name = "Ada"; // -> logs "name = Ada"
+// w.state = 5;
+w.state = 6;
+w.state = 7;
+
+$.onSet(() => w.state2, (v) => console.log("Changed state2", v));
+
+// w.state2 = 5;
+w.state2 = 1234;
+w.state2 = 12345;
 ```
+
+Notice how `WaylandState` is an interface - This is due to TypeScript making a difference between interface and static record types.
 
 `instanceof` works for both the generated class and its base:
 
@@ -123,13 +110,13 @@ u instanceof Entity // true
 Selectors must be simple property-path expressions.
 
 ```ts
-// ✓ good
+// good
 () => model.count
 () => model.user.name
 () => model.items
 () => model.settings?.theme
 
-// ✗ won't work
+// won't work
 () => model.items.map(x => x.id)
 () => fn(model.user)
 () => [model.user, model.id]

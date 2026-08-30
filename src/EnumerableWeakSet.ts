@@ -1,7 +1,7 @@
 export class EnumerableWeakSet<T extends WeakKey> implements WeakSet<T>, Iterable<T> {
   #set = new WeakSet<T>();
 
-  #refs: WeakRef<T>[] = [];
+  #refs: Set<WeakRef<T>> = new Set();
 
   constructor(iterable: Iterable<T> | null = null) {
     if (iterable) {
@@ -17,7 +17,7 @@ export class EnumerableWeakSet<T extends WeakKey> implements WeakSet<T>, Iterabl
 
   add(value: T): this {
     if (!this.#set.has(value)) {
-      this.#refs.push(new WeakRef(value));
+      this.#refs.add(new WeakRef(value));
       this.#set.add(value);
     }
     return this;
@@ -31,16 +31,19 @@ export class EnumerableWeakSet<T extends WeakKey> implements WeakSet<T>, Iterabl
     return this.#set.has(value);
   }
 
+  clear(): void {
+    this.#refs.clear();
+  }
+
   *[Symbol.iterator](): Generator<T, void, unknown> {
     const set = this.#set;
-    const refs: WeakRef<T>[] = [];
     for (const wr of this.#refs) {
       const value = wr.deref();
       if (value && set.has(value)) {
-        refs.push(wr);
         yield value;
+      } else {
+        this.#refs.delete(wr);
       }
     }
-    this.#refs = refs;
   }
 }
