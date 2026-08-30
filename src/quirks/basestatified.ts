@@ -68,6 +68,12 @@ export function makeStatified<
   }
 
   const dataLayers = new WeakMap<object, object>();
+  function getDataLayer(recv: object): object {
+    if (!dataLayers.has(recv)) {
+      dataLayers.set(recv, {});
+    }
+    return dataLayers.get(recv)!;
+  }
 
   const ExtractionShimBase = function (...args: typeof Superclass extends ClassType<infer Args, object> ? Args : never) {
     const inst = Reflect.construct(Superclass, args, new.target);
@@ -104,15 +110,18 @@ export function makeStatified<
 
     Reflect.setPrototypeOf(inst, proto);
 
-    dataLayers.set(inst, {});
+    if (!dataLayers.has(inst)) {
+      dataLayers.set(inst, {});
+    }
 
     return inst;
   }
 
   ExtractionShimBase.prototype = new Proxy({}, {
     get(target, prop, recv) {
-      return Reflect.has(dataLayers.get(recv)!, prop)
-        ? Reflect.get(dataLayers.get(recv)!, prop)
+      const dataLayer = getDataLayer(recv);
+      return dataLayer && Reflect.has(dataLayer, prop)
+        ? Reflect.get(dataLayer, prop)
         : Reflect.get(target, prop, recv);
     },
 
@@ -122,6 +131,8 @@ export function makeStatified<
       const had = Reflect.has(recv, prop);
       const oldVal = Reflect.get(recv, prop) as unknown;
 
+      const dataLayer = getDataLayer(recv);
+
       let result;
       const desc = getPrototypeChainDescriptor(target, prop);
       if (desc?.set || desc?.get) {
@@ -129,7 +140,7 @@ export function makeStatified<
       } else if (typeof prop === "string" && prop.startsWith("#")) {
         result = Reflect.set(target, prop, newVal, recv);
       } else {
-        result = Reflect.set(dataLayers.get(recv)!, prop, newVal);
+        result = dataLayer && Reflect.set(dataLayer, prop, newVal);
       }
 
       if (result) {
