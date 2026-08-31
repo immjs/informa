@@ -1,25 +1,35 @@
 import type { StateMetadata, Exitable, StatifiableObj } from "./low.js";
-import { version } from "../package.json";
 
-export const exitProxySymbol = Symbol.for(`hi-this-is-informa-${version}-s--exit-proxy-symbol`);
+// Single shared namespace object on globalThis
+interface InformaGlobalContext {
+  mode: "normal" | "extract-proxy-path";
+  metadataMap: WeakMap<Statify<StatifiableObj>, StateMetadata>;
+  proxyMemoized: WeakMap<object, Statify<StatifiableObj>>;
+}
 
-// The mode is used by the functions exposed by informa,
-// no concurrency issues arise because of the unique call stack.
-const globalStateModeSymbol = Symbol.for(`hi-this-is-informa-${version}-s--global-state-mode`);
-export const globalStateMode = Reflect.get(globalThis, globalStateModeSymbol) ?? { mode: "normal" as "normal" | "extract-proxy-path" };
-Reflect.defineProperty(globalThis, globalStateModeSymbol, { value: globalStateMode });
+const INFORMA_GLOBAL_KEY = "__INFORMA__";
+
+const informaGlobal: InformaGlobalContext = Reflect.get(globalThis, INFORMA_GLOBAL_KEY) ?? {
+  mode: "normal",
+  metadataMap: new WeakMap(),
+  proxyMemoized: new WeakMap(),
+};
+
+Reflect.defineProperty(globalThis, INFORMA_GLOBAL_KEY, { value: informaGlobal, configurable: true, writable: true });
+
+export const exitProxySymbol = "__informa_exit_proxy__";
+
+export const globalStateMode = informaGlobal;
 
 export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
-  globalStateMode.mode = mode;
+  informaGlobal.mode = mode;
 }
+
 export function getGlobalStateMode(): "normal" | "extract-proxy-path" {
-  return globalStateMode.mode;
+  return informaGlobal.mode;
 }
 
-const metadataMapSymbol = Symbol.for(`hi-this-is-informa-${version}-s--metadata-map`);
-export const metadataMap = Reflect.get(globalThis, metadataMapSymbol) ?? new WeakMap<Statify<StatifiableObj>, StateMetadata>();
-
-Reflect.defineProperty(globalThis, metadataMapSymbol, { value: metadataMap });
+export const metadataMap = informaGlobal.metadataMap;
 
 export function getMetadataOf(v: Statify<StatifiableObj>) {
   const result = metadataMap.get(v);
@@ -28,23 +38,21 @@ export function getMetadataOf(v: Statify<StatifiableObj>) {
 
   return result;
 }
+
 export function setMetadataOf(v: Statify<StatifiableObj>, s: StateMetadata) {
   metadataMap.set(v, s);
 
   return s;
 }
 
-const proxyMemoizedSymbol = Symbol.for(`hi-this-is-informa-${version}-s--proxy-memoized`);
-export const proxyMemoized = Reflect.get(globalThis, proxyMemoizedSymbol) ?? new WeakMap<object, Statify<StatifiableObj>>();
+export const proxyMemoized = informaGlobal.proxyMemoized;
 
-Reflect.defineProperty(globalThis, proxyMemoizedSymbol, { value: proxyMemoized });
-
-export const statifySealKey = Symbol.for(`hi-this-is-informa-${version}-s--statify-seal-key`);
+export const statifySealKey = "__informa_statify_seal__";
 export function isStatified<T extends StatifiableObj>(v: T): v is Statify<T> {
-  return (v as Statify<T>)[statifySealKey];
+  return Boolean((v as any)?.[statifySealKey]);
 }
 export type Statify<T extends StatifiableObj> = T & { [statifySealKey]: true } & Exitable;
 
-export const isStatifiedSetKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedSet`);
-export const isStatifiedArrayKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedArray`);
-export const isStatifiedMapKey = Symbol.for(`hi-this-is-informa-${version}-s--isStatifiedMap`);
+export const isStatifiedSetKey = "__informa_is_statified_set__";
+export const isStatifiedArrayKey = "__informa_is_statified_array__";
+export const isStatifiedMapKey = "__informa_is_statified_map__";
