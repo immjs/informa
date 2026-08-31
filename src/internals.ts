@@ -6,17 +6,14 @@ export const exitProxySymbol = Symbol.for(`hi-this-is-informa-${version}-s--exit
 // The mode is used by the functions exposed by informa,
 // no concurrency issues arise because of the unique call stack.
 const globalStateModeSymbol = Symbol.for(`hi-this-is-informa-${version}-s--global-state-mode`);
-export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
-  if (getGlobalStateMode() === mode) return;
+export const globalStateMode = Reflect.get(globalThis, globalStateModeSymbol) ?? { mode: "normal" as "normal" | "extract-proxy-path" };
+Reflect.defineProperty(globalThis, globalStateModeSymbol, { value: globalStateMode });
 
-  if (mode === "normal") {
-    Reflect.deleteProperty(globalThis, globalStateModeSymbol);
-  } else {
-    Reflect.defineProperty(globalThis, globalStateModeSymbol, { value: mode, configurable: true });
-  }
+export function setGlobalStateMode(mode: "normal" | "extract-proxy-path") {
+  globalStateMode.mode = mode;
 }
-export function getGlobalStateMode() {
-  return Reflect.get(globalThis, globalStateModeSymbol) ?? "normal";
+export function getGlobalStateMode(): "normal" | "extract-proxy-path" {
+  return globalStateMode.mode;
 }
 
 const metadataMapSymbol = Symbol.for(`hi-this-is-informa-${version}-s--metadata-map`);
