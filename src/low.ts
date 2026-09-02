@@ -428,10 +428,17 @@ export function selectorToRootAndPath(selector: () => Statify<StatifiableObj>) {
   setGlobalStateMode("extract-proxy-path");
 
   let result;
-  try  {
+  let err: any;
+  try {
     result = (selector() as Exitable)[exitProxySymbol];
+  } catch (e) {
+    err = e;
   } finally {
     setGlobalStateMode("normal");
+  }
+  if (err) throw err;
+  if (!result) {
+    throw new Error("Was unable to get state, are you sure there is any statified member in your provided chain?");
   }
 
   return result;

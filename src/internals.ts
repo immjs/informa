@@ -1,23 +1,43 @@
 import type { StateMetadata, Exitable, StatifiableObj } from "./low.js";
 
-// Single shared namespace object on globalThis
+// Single root namespace object on globalThis containing shared state and symbols
 interface InformaGlobalContext {
   mode: "normal" | "extract-proxy-path";
   metadataMap: WeakMap<Statify<StatifiableObj>, StateMetadata>;
   proxyMemoized: WeakMap<object, Statify<StatifiableObj>>;
+  exitProxySymbol: symbol;
+  statifySealKey: symbol;
+  isStatifiedSetKey: symbol;
+  isStatifiedArrayKey: symbol;
+  isStatifiedMapKey: symbol;
 }
 
 const INFORMA_GLOBAL_KEY = "__INFORMA__";
 
-const informaGlobal: InformaGlobalContext = Reflect.get(globalThis, INFORMA_GLOBAL_KEY) ?? {
+const existingGlobal: InformaGlobalContext | undefined = Reflect.get(globalThis, INFORMA_GLOBAL_KEY);
+
+export const exitProxySymbol: unique symbol = (existingGlobal?.exitProxySymbol ?? Symbol("informa.exitProxySymbol")) as any;
+export const statifySealKey: unique symbol = (existingGlobal?.statifySealKey ?? Symbol("informa.statifySealKey")) as any;
+export const isStatifiedSetKey: unique symbol = (existingGlobal?.isStatifiedSetKey ?? Symbol("informa.isStatifiedSet")) as any;
+export const isStatifiedArrayKey: unique symbol = (existingGlobal?.isStatifiedArrayKey ?? Symbol("informa.isStatifiedArray")) as any;
+export const isStatifiedMapKey: unique symbol = (existingGlobal?.isStatifiedMapKey ?? Symbol("informa.isStatifiedMap")) as any;
+
+const informaGlobal: InformaGlobalContext = existingGlobal ?? {
   mode: "normal",
   metadataMap: new WeakMap(),
   proxyMemoized: new WeakMap(),
+  exitProxySymbol,
+  statifySealKey,
+  isStatifiedSetKey,
+  isStatifiedArrayKey,
+  isStatifiedMapKey,
 };
 
-Reflect.defineProperty(globalThis, INFORMA_GLOBAL_KEY, { value: informaGlobal, configurable: true, writable: true });
-
-export const exitProxySymbol = "__informa_exit_proxy__";
+Reflect.defineProperty(globalThis, INFORMA_GLOBAL_KEY, {
+  value: informaGlobal,
+  configurable: true,
+  writable: true,
+});
 
 export const globalStateMode = informaGlobal;
 
@@ -47,12 +67,8 @@ export function setMetadataOf(v: Statify<StatifiableObj>, s: StateMetadata) {
 
 export const proxyMemoized = informaGlobal.proxyMemoized;
 
-export const statifySealKey = "__informa_statify_seal__";
 export function isStatified<T extends StatifiableObj>(v: T): v is Statify<T> {
   return Boolean((v as any)?.[statifySealKey]);
 }
-export type Statify<T extends StatifiableObj> = T & { [statifySealKey]: true } & Exitable;
 
-export const isStatifiedSetKey = "__informa_is_statified_set__";
-export const isStatifiedArrayKey = "__informa_is_statified_array__";
-export const isStatifiedMapKey = "__informa_is_statified_map__";
+export type Statify<T extends StatifiableObj> = T & { [statifySealKey]: true } & Exitable;
