@@ -1,4 +1,5 @@
 import type { StateMetadata, Exitable, StatifiableObj } from "./low.js";
+import { EnumerableWeakSet } from "./EnumerableWeakSet.js";
 
 // Single root namespace object on globalThis containing shared state and symbols
 interface InformaGlobalContext {
@@ -10,6 +11,7 @@ interface InformaGlobalContext {
   isStatifiedSetKey: symbol;
   isStatifiedArrayKey: symbol;
   isStatifiedMapKey: symbol;
+  pendingAssemblies: EnumerableWeakSet<object>;
 }
 
 const INFORMA_GLOBAL_KEY = "__INFORMA__";
@@ -31,7 +33,10 @@ const informaGlobal: InformaGlobalContext = existingGlobal ?? {
   isStatifiedSetKey,
   isStatifiedArrayKey,
   isStatifiedMapKey,
+  pendingAssemblies: new EnumerableWeakSet(),
 };
+
+informaGlobal.pendingAssemblies ??= new EnumerableWeakSet();
 
 Reflect.defineProperty(globalThis, INFORMA_GLOBAL_KEY, {
   value: informaGlobal,
@@ -66,6 +71,7 @@ export function setMetadataOf(v: Statify<StatifiableObj>, s: StateMetadata) {
 }
 
 export const proxyMemoized = informaGlobal.proxyMemoized;
+export const pendingAssemblies = informaGlobal.pendingAssemblies;
 
 export function isStatified<T extends StatifiableObj>(v: T): v is Statify<T> {
   return Boolean((v as any)?.[statifySealKey]);

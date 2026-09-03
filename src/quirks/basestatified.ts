@@ -1,4 +1,3 @@
-import { EnumerableWeakSet } from "../EnumerableWeakSet.js";
 import {
   exitProxySymbol,
   getMetadataOf,
@@ -7,6 +6,7 @@ import {
   statifySealKey,
   type Statify,
   metadataMap,
+  pendingAssemblies,
 } from "../internals.js";
 import {
   emitDescendantPathEvents,
@@ -19,8 +19,6 @@ import {
 } from "../low.js";
 
 type ClassType<T extends any[] = any[], U = object> = new (...args: T) => U;
-
-const pendingAssemblies = new EnumerableWeakSet<object>();
 
 const shimCache = new WeakMap<Function, object>();
 
