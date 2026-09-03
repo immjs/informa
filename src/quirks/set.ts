@@ -13,9 +13,15 @@ export class StatifiedSet<T extends StatifiableProp> extends Set<T> implements S
   #metadata: StateMetadata;
 
   constructor(args?: Iterable<T> | null) {
-    super(args);
+    super();
 
     this.#metadata = setMetadataOf(this, new StateMetadata());
+
+    if (args) {
+      for (const item of args) {
+        super.add(item);
+      }
+    }
   }
 
   add(value: T): this {

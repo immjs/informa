@@ -117,12 +117,12 @@ export function on<T, K extends string | number | symbol, V, U, K1, V1>(
   const eventEmitter = metadata.eventEmitterAtPath(path);
 
   for (const [key, value] of Object.entries(listeners)) {
-    eventEmitter.on(key, value);
+    eventEmitter.on(key, value, { path, stateRoot });
   }
 
   return () => {
     for (const [key, value] of Object.entries(listeners)) {
-      eventEmitter.off(key, value);
+      eventEmitter.off(key, value, { path, stateRoot });
     }
   }
 }
@@ -137,7 +137,7 @@ export function off<T, K extends string | number | symbol, V, U, K1, V1>(
   const eventEmitter = metadata.eventEmitterAtPath(path);
 
   for (const [key, value] of Object.entries(listeners)) {
-    eventEmitter.off(key, value);
+    eventEmitter.off(key, value, { path, stateRoot });
   }
 }
 

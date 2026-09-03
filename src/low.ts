@@ -1,5 +1,5 @@
 import { exitProxySymbol, getGlobalStateMode, getMetadataOf, isStatifiedArrayKey, isStatifiedMapKey, isStatifiedSetKey, proxyMemoized, setGlobalStateMode, setMetadataOf, statifySealKey, type Statify } from "./internals.js";
-import { EventEmitter } from "node:events";
+import { EventEmitter } from "./EventEmitter.js";
 import { StatifiedSet } from "./quirks/set.js";
 import { isListInGrid } from "./utils.js";
 import { EnumerableWeakMap } from "./EnumerableWeakMap.js";
@@ -107,8 +107,6 @@ export class StateMetadata extends EventEmitter<ProxyEventEmitterEvents> {
     eventName: string | E,
     ...args: E extends string
       ? ProxyEventEmitterEvents[E]
-      : E extends keyof EventEmitter.EventEmitterEventMap
-      ? EventEmitter.EventEmitterEventMap[E]
       : any[]
   ): boolean {
     let result = super.emit(eventName, ...args);
@@ -129,7 +127,10 @@ export class StateMetadata extends EventEmitter<ProxyEventEmitterEvents> {
       else seen.set(ancestor, [path]);
 
       const target = ancestor.eventEmitterAtPathMaybe(path);
-      if (target) result ||= target.emit(eventName, ...args);
+      if (target) {
+        const targetResult = target.emitAt(path, eventName, ...args);
+        result = targetResult || result;
+      }
 
       ancestor.#pushParents(queue, path);
     }
@@ -158,90 +159,99 @@ export type Statified<T extends StatifiableProp> = T extends object
       : Statify<{ [K in keyof T]: Statified<T[K]> }>
   : T;
 
-export function emitCollectionTransition(old: unknown, next: unknown): void {
-  const oldIsSet    = old  != null && typeof old  === "object" && (old  as any)[isStatifiedSetKey];
-  const nextIsSet   = next != null && typeof next === "object" && (next as any)[isStatifiedSetKey];
-  const oldIsArray  = old  != null && typeof old  === "object" && (old  as any)[isStatifiedArrayKey];
-  const nextIsArray = next != null && typeof next === "object" && (next as any)[isStatifiedArrayKey];
-  const oldIsMap    = old  != null && typeof old  === "object" && (old  as any)[isStatifiedMapKey];
-  const nextIsMap   = next != null && typeof next === "object" && (next as any)[isStatifiedMapKey];
+export function emitCollectionTransition(
+  oldVal: unknown,
+  nextVal: unknown,
+  emitter?: StateMetadata | null,
+  prop?: string | symbol,
+): void {
+  if (!emitter || oldVal === nextVal) return;
 
-  if (oldIsSet && nextIsSet && old !== next) {
-    const oldSet  = old  as StatifiedSet<unknown>;
-    const nextSet = next as StatifiedSet<unknown>;
-    const oldMeta = getMetadataOf(oldSet as Statify<{}>);
-    let changed = false;
-    for (const item of oldSet) {
-      if (!nextSet.has(item)) { oldMeta.emit("deleteItem", item); changed = true; }
+  const emit = (event: string, ...args: any[]) => {
+    if (prop !== undefined) {
+      emitter.emitAt([prop], event, ...args);
+    } else {
+      emitter.emit(event as any, ...args);
     }
-    for (const item of nextSet) {
-      if (!oldSet.has(item))  { oldMeta.emit("addItem",    item); changed = true; }
-    }
-    if (changed) oldMeta.emit("cardChanged");
-    return;
-  } else if (oldIsSet) {
-    const oldSet  = old as StatifiedSet<unknown>;
-    const oldMeta = getMetadataOf(oldSet as Statify<{}>);
-    let changed = false;
-    for (const item of oldSet) { oldMeta.emit("deleteItem", item); changed = true; }
-    if (changed) oldMeta.emit("cardChanged");
-  } else if (nextIsSet) {
-    const nextSet  = next as StatifiedSet<unknown>;
-    const nextMeta = getMetadataOf(nextSet as Statify<{}>);
-    let changed = false;
-    for (const item of nextSet) { nextMeta.emit("addItem", item); changed = true; }
-    if (changed) nextMeta.emit("cardChanged");
-  }
+  };
 
-  if (old !== next) {
-    if (oldIsArray) {
-      const oldArr  = old as StatifiedArray<unknown>;
-      const oldMeta = getMetadataOf(oldArr as Statify<{}>);
-      if (oldArr.length > 0) {
-        for (let i = oldArr.length - 1; i >= 0; i--) {
-          oldMeta.emit("spliceOutElement", oldArr[i], i);
+  const oldIsSet = Boolean(oldVal && typeof oldVal === "object" && (oldVal as any)[isStatifiedSetKey]);
+  const nextIsSet = Boolean(nextVal && typeof nextVal === "object" && (nextVal as any)[isStatifiedSetKey]);
+  if (oldIsSet || nextIsSet) {
+    const oldSet = oldIsSet ? (oldVal as Set<unknown>) : undefined;
+    const nextSet = nextIsSet ? (nextVal as Set<unknown>) : undefined;
+    let changed = false;
+
+    if (oldSet) {
+      for (const item of oldSet) {
+        if (!nextSet?.has(item)) {
+          emit("deleteItem", item);
+          changed = true;
         }
-        oldMeta.emit("lengthChanged");
       }
     }
-    if (nextIsArray) {
-      const nextArr  = next as StatifiedArray<unknown>;
-      const nextMeta = getMetadataOf(nextArr as Statify<{}>);
-      if (nextArr.length > 0) {
-        for (let i = 0; i < nextArr.length; i++) {
-          nextMeta.emit("spliceInElement", nextArr[i], i);
+    if (nextSet) {
+      for (const item of nextSet) {
+        if (!oldSet?.has(item)) {
+          emit("addItem", item);
+          changed = true;
         }
-        nextMeta.emit("lengthChanged");
       }
     }
+    if (changed) emit("cardChanged");
+    return;
   }
 
-  if (oldIsMap && nextIsMap && old !== next) {
-    const oldMap  = old  as StatifiedMap<unknown, unknown>;
-    const nextMap = next as StatifiedMap<unknown, unknown>;
-    const oldMeta = getMetadataOf(oldMap as Statify<{}>);
+  const oldIsMap = Boolean(oldVal && typeof oldVal === "object" && (oldVal as any)[isStatifiedMapKey]);
+  const nextIsMap = Boolean(nextVal && typeof nextVal === "object" && (nextVal as any)[isStatifiedMapKey]);
+  if (oldIsMap || nextIsMap) {
+    const oldMap = oldIsMap ? (oldVal as Map<unknown, unknown>) : undefined;
+    const nextMap = nextIsMap ? (nextVal as Map<unknown, unknown>) : undefined;
     let changed = false;
-    for (const [k, v] of oldMap) {
-      if (!nextMap.has(k)) { oldMeta.emit("deleteEntry", k, v); changed = true; }
-      else if (nextMap.get(k) !== v) { oldMeta.emit("replaceEntry", k, nextMap.get(k)); oldMeta.emit("setEntry", k, nextMap.get(k)); changed = true; }
+
+    if (oldMap) {
+      for (const [k, v] of oldMap) {
+        if (!nextMap?.has(k)) {
+          emit("deleteEntry", k, v);
+          changed = true;
+        } else if (nextMap.get(k) !== v) {
+          emit("replaceEntry", k, nextMap.get(k));
+          emit("setEntry", k, nextMap.get(k));
+          changed = true;
+        }
+      }
     }
-    for (const [k, v] of nextMap) {
-      if (!oldMap.has(k)) { oldMeta.emit("addEntry", k, v); oldMeta.emit("setEntry", k, v); changed = true; }
+    if (nextMap) {
+      for (const [k, v] of nextMap) {
+        if (!oldMap?.has(k)) {
+          emit("addEntry", k, v);
+          emit("setEntry", k, v);
+          changed = true;
+        }
+      }
     }
-    if (changed) oldMeta.emit("sizeChanged");
+    if (changed) emit("sizeChanged");
     return;
-  } else if (oldIsMap) {
-    const oldMap  = old as StatifiedMap<unknown, unknown>;
-    const oldMeta = getMetadataOf(oldMap as Statify<{}>);
-    let changed = false;
-    for (const [k, v] of oldMap) { oldMeta.emit("deleteEntry", k, v); changed = true; }
-    if (changed) oldMeta.emit("sizeChanged");
-  } else if (nextIsMap) {
-    const nextMap  = next as StatifiedMap<unknown, unknown>;
-    const nextMeta = getMetadataOf(nextMap as Statify<{}>);
-    let changed = false;
-    for (const [k, v] of nextMap) { nextMeta.emit("addEntry", k, v); nextMeta.emit("setEntry", k, v); changed = true; }
-    if (changed) nextMeta.emit("sizeChanged");
+  }
+
+  const oldIsArray = Boolean(oldVal && typeof oldVal === "object" && (oldVal as any)[isStatifiedArrayKey]);
+  const nextIsArray = Boolean(nextVal && typeof nextVal === "object" && (nextVal as any)[isStatifiedArrayKey]);
+  if (oldIsArray || nextIsArray) {
+    const oldArr = oldIsArray ? (oldVal as unknown[]) : undefined;
+    const nextArr = nextIsArray ? (nextVal as unknown[]) : undefined;
+
+    if (oldArr && oldArr.length > 0) {
+      for (let i = oldArr.length - 1; i >= 0; i--) {
+        emit("spliceOutElement", oldArr[i], i);
+      }
+      emit("lengthChanged");
+    }
+    if (nextArr && nextArr.length > 0) {
+      for (let i = 0; i < nextArr.length; i++) {
+        emit("spliceInElement", nextArr[i], i);
+      }
+      emit("lengthChanged");
+    }
   }
 }
 
@@ -303,8 +313,6 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
             unhook(stateMetadata, prop, oldValMetadata);
           }
 
-          emitCollectionTransition(oldVal, newVal);
-
           if (
             typeof prop !== "symbol" &&
             Number.isInteger(Number(prop)) &&
@@ -325,6 +333,8 @@ export function statifyObject<T extends { [k: string | symbol]: Statified<Statif
 
           stateMetadata.emit('addProp', newVal, prop);
         }
+
+        emitCollectionTransition(oldVal, newVal, stateMetadata.eventEmitterAtPathMaybe([prop]), prop);
 
         stateMetadata.emit('setProp', newVal, prop);
 

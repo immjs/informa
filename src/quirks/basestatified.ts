@@ -174,8 +174,6 @@ export function makeStatified<
             unhook(stateMetadata, prop, oldValMetadata);
           }
 
-          emitCollectionTransition(oldVal, newVal);
-
           if (
             typeof prop !== "symbol" &&
             Number.isInteger(Number(prop)) &&
@@ -196,6 +194,8 @@ export function makeStatified<
 
           stateMetadata.emit('addProp', newVal, prop);
         }
+
+        emitCollectionTransition(oldVal, newVal, stateMetadata.eventEmitterAtPathMaybe([prop]), prop);
 
         stateMetadata.emit('setProp', newVal, prop);
 

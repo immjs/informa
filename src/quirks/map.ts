@@ -13,9 +13,15 @@ export class StatifiedMap<K, V> extends Map<K, V> implements Statify<Map<K, V>> 
   #metadata: StateMetadata;
 
   constructor(args?: Iterable<[K, V]> | null) {
-    super(args);
+    super();
 
     this.#metadata = setMetadataOf(this, new StateMetadata());
+
+    if (args) {
+      for (const [key, value] of args) {
+        super.set(key, value);
+      }
+    }
   }
 
   clear(): void {
