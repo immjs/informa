@@ -103,6 +103,11 @@ export function makeStatified<
 
         return result;
       },
+
+      has(target, p) {
+        const dataLayer = getDataLayer(inst);
+        return Reflect.has(dataLayer, p) || Reflect.has(target, p);
+      },
     });
 
     if (!dataLayers.has(inst)) {
